@@ -87,6 +87,15 @@ export interface UserData {
   totp_enabled: boolean;
 }
 
+export interface ForgotPasswordData {
+  email: string;
+}
+
+export interface ResetPasswordData {
+  token: string;
+  password: string;
+}
+
 export const api = {
   async signup(data: SignupData): Promise<void> {
     return apiRequest('/auth/signup', {
@@ -122,6 +131,20 @@ export const api = {
   async logout(): Promise<void> {
     return apiRequest('/auth/logout', {
       method: 'POST',
+    });
+  },
+
+  async forgotPassword(data: ForgotPasswordData): Promise<void> {
+    return apiRequest('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async resetPassword(data: ResetPasswordData): Promise<void> {
+    return apiRequest('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   },
 };
