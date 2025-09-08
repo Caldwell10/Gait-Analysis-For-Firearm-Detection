@@ -101,16 +101,26 @@ export default function LoginPage() {
           {loading ? 'Signing in...' : 'Sign in'}
         </Button>
 
-        <div className="text-center">
-          <span className="text-sm text-gray-600">
-            Don't have an account?{' '}
+        <div className="text-center space-y-3">
+          <div>
             <a
-              href="/signup"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
+              href="/forgot-password"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-500"
             >
-              Sign up
+              Forgot your password?
             </a>
-          </span>
+          </div>
+          <div>
+            <span className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <a
+                href="/signup"
+                className="font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                Sign up
+              </a>
+            </span>
+          </div>
         </div>
       </form>
     </AuthLayout>
