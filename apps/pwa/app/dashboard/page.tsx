@@ -26,7 +26,7 @@ export default function DashboardPage() {
     }
   };
 
-  // This will be handled by the auth guard in layout
+  // Handled by the auth guard in layout
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
