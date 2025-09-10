@@ -44,12 +44,8 @@ export default function LoginPage() {
       // Refresh session to get user data
       await refreshSession();
 
-      // Redirect based on 2FA requirement
-      if (response.totp_required) {
-        router.push('/2fa/verify');
-      } else {
-        router.push('/2fa/setup');
-      }
+      // Skip 2FA - go directly to dashboard
+      router.push('/dashboard');
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.status === 401) {
