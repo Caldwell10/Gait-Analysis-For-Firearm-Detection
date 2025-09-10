@@ -108,7 +108,7 @@ Thumbs.db
 logs
 *.log
 
-# Python (for backend when added)
+# Python Backend
 __pycache__/
 *.py[cod]
 *$py.class
@@ -120,6 +120,21 @@ ENV/
 env.bak/
 venv.bak/
 .venv/
+thermal-env/
+
+# FastAPI/SQLAlchemy
+*.db
+*.sqlite
+*.sqlite3
+alembic/versions/*.py
+!alembic/versions/README
+
+# Python backend specific
+apps/api/.env
+apps/api/.env.local
+apps/api/uploads/
+apps/api/logs/
+apps/api/temp/
 
 # TestSprite generated files
 testsprite_tests/
@@ -131,6 +146,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+test_endpoints.py
 
 # System design documentation (untracked reference file)
 SYSTEM_DESIGN.md
