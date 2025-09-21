@@ -5,22 +5,21 @@ from sqlalchemy.orm import Session
 from typing import List
 from ..core.database import get_db
 from ..core.security import (
-    create_access_token, decode_access_token, verify_totp, 
-    generate_totp_uri, generate_password_reset_token, verify_reset_token
+    create_access_token, decode_access_token,
+    generate_password_reset_token, verify_reset_token
 )
 from ..schemas.auth import (
-    SignupRequest, LoginRequest, LoginResponse, TotpSetupResponse, 
-    TotpVerifyRequest, TotpVerifyResponse, ForgotPasswordRequest,
-    ResetPasswordRequest, UserResponse, CreateUserRequest, 
-    UpdateUserRoleRequest, UsersListResponse, TokenData
+    SignupRequest, LoginRequest, LoginResponse,
+    ForgotPasswordRequest, ResetPasswordRequest, UserResponse,
+    CreateUserRequest, UpdateUserRoleRequest, UsersListResponse, TokenData
 )
 from ..models.user import User, UserRole
 from ..crud.user import (
     get_user_by_email, create_user, authenticate_user, update_user_last_login,
-    setup_user_totp, enable_user_totp, get_users, get_users_count,
-    update_user_role, activate_user, deactivate_user, get_user_by_id,
-    create_password_reset_token, get_valid_reset_token, mark_reset_token_used,
-    update_user_password, create_user_session, revoke_user_session, is_session_revoked
+    get_users, get_users_count, update_user_role, activate_user, deactivate_user,
+    get_user_by_id, create_password_reset_token, get_valid_reset_token,
+    mark_reset_token_used, update_user_password, create_user_session,
+    revoke_user_session, is_session_revoked
 )
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -131,7 +130,7 @@ async def login(user_data: LoginRequest, response: Response, db: Session = Depen
         samesite="lax"
     )
     
-    return LoginResponse(totp_required=False)
+    return LoginResponse(message="Login successful")
 
 
 @router.post("/logout")
@@ -159,97 +158,10 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         id=str(current_user.id),
         email=current_user.email,
         role=UserRole(current_user.role),  # Convert string to enum
-        totp_enabled=current_user.totp_enabled,
         last_login=current_user.last_login,
         created_at=current_user.created_at,
         is_active=current_user.is_active
     )
-
-
-@router.post("/totp/setup", response_model=TotpSetupResponse)
-async def setup_totp(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Setup TOTP 2FA for user."""
-    secret = setup_user_totp(db, current_user.id)
-    otpauth_url = generate_totp_uri(secret, current_user.email)
-    
-    return TotpSetupResponse(
-        secret=secret,
-        otpauth_url=otpauth_url
-    )
-
-
-@router.post("/totp/verify", response_model=TotpVerifyResponse)
-async def verify_totp_code(
-    totp_data: TotpVerifyRequest, 
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db)
-):
-    """Verify TOTP code and complete authentication."""
-    # Get temp token from 2FA login or current user token
-    temp_token = request.cookies.get("temp_token")
-    access_token = request.cookies.get("access_token")
-    
-    token = temp_token or access_token
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No authentication token found"
-        )
-    
-    try:
-        payload = decode_access_token(token)
-        user_id = payload.get("user_id")
-        user = get_user_by_id(db, uuid.UUID(user_id))
-        
-        if not user or not user.totp_secret:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="TOTP not set up for user"
-            )
-        
-        # Verify TOTP code
-        if not verify_totp(user.totp_secret, totp_data.code):
-            return TotpVerifyResponse(verified=False)
-        
-        # If this is first-time setup, enable TOTP
-        if not user.totp_enabled:
-            enable_user_totp(db, user.id)
-        
-        # If this was a temp token from login, create full session
-        if temp_token:
-            update_user_last_login(db, user.id)
-            
-            token_data = {
-                "user_id": str(user.id),
-                "email": user.email,
-                "role": user.role,
-                "jti": str(uuid.uuid4())
-            }
-            
-            new_token = create_access_token(token_data)
-            expires_at = datetime.utcnow() + timedelta(minutes=15)
-            
-            # Store session
-            create_user_session(db, user.id, token_data["jti"], expires_at)
-            
-            response.set_cookie(
-                key="access_token",
-                value=new_token,
-                max_age=900,
-                httponly=True,
-                secure=True,
-                samesite="lax"
-            )
-            response.delete_cookie("temp_token")
-        
-        return TotpVerifyResponse(verified=True)
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token or verification failed"
-        )
 
 
 @router.post("/forgot-password")
@@ -302,7 +214,6 @@ async def list_users(
             id=str(user.id),
             email=user.email,
             role=user.role,
-            totp_enabled=user.totp_enabled,
             last_login=user.last_login,
             created_at=user.created_at,
             is_active=user.is_active
@@ -337,7 +248,6 @@ async def create_new_user(
         id=str(new_user.id),
         email=new_user.email,
         role=new_user.role,
-        totp_enabled=new_user.totp_enabled,
         last_login=new_user.last_login,
         created_at=new_user.created_at,
         is_active=new_user.is_active
@@ -366,7 +276,6 @@ async def update_user_role_endpoint(
             id=str(updated_user.id),
             email=updated_user.email,
             role=updated_user.role,
-            totp_enabled=updated_user.totp_enabled,
             last_login=updated_user.last_login,
             created_at=updated_user.created_at,
             is_active=updated_user.is_active
@@ -405,7 +314,6 @@ async def toggle_user_active_status(
             id=str(updated_user.id),
             email=updated_user.email,
             role=updated_user.role,
-            totp_enabled=updated_user.totp_enabled,
             last_login=updated_user.last_login,
             created_at=updated_user.created_at,
             is_active=updated_user.is_active

@@ -1,6 +1,5 @@
 import secrets
 import bcrypt
-import pyotp
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from typing import Optional, Dict, Any
@@ -48,26 +47,6 @@ def decode_access_token(token: str) -> Dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
         )
-
-
-def generate_totp_secret() -> str:
-    """Generate a new TOTP secret key."""
-    return pyotp.random_base32()
-
-
-def generate_totp_uri(secret: str, email: str) -> str:
-    """Generate a TOTP URI for authenticator apps."""
-    totp = pyotp.TOTP(secret)
-    return totp.provisioning_uri(
-        name=email,
-        issuer_name="Thermal Gait Surveillance"
-    )
-
-
-def verify_totp(secret: str, token: str) -> bool:
-    """Verify a TOTP token."""
-    totp = pyotp.TOTP(secret)
-    return totp.verify(token, valid_window=1)  # Allow 1 step tolerance
 
 
 def generate_password_reset_token() -> str:
