@@ -19,10 +19,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(50), default=UserRole.SECURITY_PERSONNEL.value, nullable=False)
     
-    # 2FA fields
-    totp_secret = Column(String(32), nullable=True)
-    totp_enabled = Column(Boolean, default=False, nullable=False)
-    
     # Status and timestamps
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from typing import Optional, List
 from ..models.user import User, PasswordResetToken, UserSession, UserRole
-from ..core.security import hash_password, verify_password, generate_totp_secret, hash_reset_token
+from ..core.security import hash_password, verify_password, hash_reset_token
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
@@ -24,7 +24,6 @@ def create_user(db: Session, email: str, password: str, role: UserRole = UserRol
         email=email,
         password_hash=hashed_password,
         role=role,
-        totp_enabled=False,
         is_active=True
     )
     db.add(db_user)
@@ -49,24 +48,6 @@ def update_user_last_login(db: Session, user_id: uuid.UUID) -> None:
     """Update user's last login timestamp."""
     db.query(User).filter(User.id == user_id).update(
         {"last_login": datetime.utcnow()}
-    )
-    db.commit()
-
-
-def setup_user_totp(db: Session, user_id: uuid.UUID) -> str:
-    """Setup TOTP for user and return secret."""
-    secret = generate_totp_secret()
-    db.query(User).filter(User.id == user_id).update(
-        {"totp_secret": secret}
-    )
-    db.commit()
-    return secret
-
-
-def enable_user_totp(db: Session, user_id: uuid.UUID) -> None:
-    """Enable TOTP for user after verification."""
-    db.query(User).filter(User.id == user_id).update(
-        {"totp_enabled": True}
     )
     db.commit()
 

@@ -15,10 +15,6 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class TotpVerifyRequest(BaseModel):
-    code: str
-
-
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -40,23 +36,13 @@ class UpdateUserRoleRequest(BaseModel):
 
 # Response schemas (output serialization)
 class LoginResponse(BaseModel):
-    totp_required: bool
-
-
-class TotpSetupResponse(BaseModel):
-    secret: str
-    otpauth_url: str
-
-
-class TotpVerifyResponse(BaseModel):
-    verified: bool
+    message: str
 
 
 class UserResponse(BaseModel):
     id: str
     email: str
     role: UserRole
-    totp_enabled: bool
     last_login: Optional[datetime] = None
     created_at: datetime
     is_active: bool
