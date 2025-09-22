@@ -154,3 +154,36 @@ SYSTEM_DESIGN.md
 # Lock files (keep package-lock.json but ignore others)
 yarn.lock
 pnpm-lock.yaml
+
+CLAUDE.md
+
+# Video processing artifacts (for future ML integration)
+*.pt
+*.pth
+*.onnx
+models/checkpoints/
+apps/api/ml/outputs/
+
+# Additional Python ML dependencies
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# Video processing temp files
+*.tmp.mp4
+*.tmp.avi
+*.processing
+
+# Additional log patterns
+apps/api/processing.log
+apps/api/analysis.log
+
+# IDE and development
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Additional security
+apps/api/.env.*
+!apps/api/.env.example

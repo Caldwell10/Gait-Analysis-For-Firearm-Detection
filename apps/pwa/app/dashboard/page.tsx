@@ -98,7 +98,7 @@ export default function DashboardPage() {
                           Account Status
                         </dt>
                         <dd className="text-lg font-medium text-gray-900">
-                          {user.totp_enabled ? 'Secured with 2FA' : 'Setup Required'}
+                          Setup Required
                         </dd>
                       </dl>
                     </div>
@@ -166,7 +166,15 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="mt-8">
+              <div className="mt-8 space-y-4">
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => router.push('/videos')}
+                    className="px-6 py-3 text-lg"
+                  >
+                    Upload Thermal Video
+                  </Button>
+                </div>
                 <p className="text-sm text-gray-500">
                   This is a placeholder dashboard. Additional features will be added in future sprints.
                 </p>
