@@ -90,7 +90,9 @@ def get_videos_by_user(
     user_id: uuid.UUID,
     skip: int = 0,
     limit: int = 20,
-    status_filter: Optional[str] = None
+    status_filter: Optional[str] = None,
+    search: Optional[str] = None,
+    include_deleted: bool = False
 ) -> List[VideoRecord]:
     """
     Get videos uploaded by a specific user with pagination
@@ -101,14 +103,30 @@ def get_videos_by_user(
         skip: Number of records to skip
         limit: Maximum number of records to return
         status_filter: Optional status filter
+        search: Optional search term for filename
+        include_deleted: Include soft-deleted videos
 
     Returns:
         List of VideoRecord instances
     """
     query = db.query(VideoRecord).filter(VideoRecord.uploaded_by == user_id)
 
+    # Filter out deleted videos unless specifically requested
+    if not include_deleted:
+        query = query.filter(VideoRecord.is_deleted == False)
+
     if status_filter:
         query = query.filter(VideoRecord.analysis_status == status_filter)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                VideoRecord.original_filename.ilike(search_term),
+                VideoRecord.description.ilike(search_term),
+                VideoRecord.tags.ilike(search_term)
+            )
+        )
 
     return query.order_by(desc(VideoRecord.created_at)).offset(skip).limit(limit).all()
 
@@ -118,7 +136,9 @@ def get_all_videos(
     skip: int = 0,
     limit: int = 20,
     status_filter: Optional[str] = None,
-    user_filter: Optional[uuid.UUID] = None
+    user_filter: Optional[uuid.UUID] = None,
+    search: Optional[str] = None,
+    include_deleted: bool = False
 ) -> List[VideoRecord]:
     """
     Get all videos with pagination (admin function)
@@ -129,11 +149,17 @@ def get_all_videos(
         limit: Maximum number of records to return
         status_filter: Optional status filter
         user_filter: Optional user filter
+        search: Optional search term for filename
+        include_deleted: Include soft-deleted videos
 
     Returns:
         List of VideoRecord instances
     """
     query = db.query(VideoRecord)
+
+    # Filter out deleted videos unless specifically requested
+    if not include_deleted:
+        query = query.filter(VideoRecord.is_deleted == False)
 
     if status_filter:
         query = query.filter(VideoRecord.analysis_status == status_filter)
@@ -141,13 +167,25 @@ def get_all_videos(
     if user_filter:
         query = query.filter(VideoRecord.uploaded_by == user_filter)
 
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                VideoRecord.original_filename.ilike(search_term),
+                VideoRecord.description.ilike(search_term),
+                VideoRecord.tags.ilike(search_term)
+            )
+        )
+
     return query.order_by(desc(VideoRecord.created_at)).offset(skip).limit(limit).all()
 
 
 def count_videos_by_user(
     db: Session,
     user_id: uuid.UUID,
-    status_filter: Optional[str] = None
+    status_filter: Optional[str] = None,
+    search: Optional[str] = None,
+    include_deleted: bool = False
 ) -> int:
     """
     Count videos uploaded by a specific user
@@ -156,14 +194,30 @@ def count_videos_by_user(
         db: Database session
         user_id: UUID of the user
         status_filter: Optional status filter
+        search: Optional search term for filename
+        include_deleted: Include soft-deleted videos
 
     Returns:
         Number of videos
     """
     query = db.query(VideoRecord).filter(VideoRecord.uploaded_by == user_id)
 
+    # Filter out deleted videos unless specifically requested
+    if not include_deleted:
+        query = query.filter(VideoRecord.is_deleted == False)
+
     if status_filter:
         query = query.filter(VideoRecord.analysis_status == status_filter)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                VideoRecord.original_filename.ilike(search_term),
+                VideoRecord.description.ilike(search_term),
+                VideoRecord.tags.ilike(search_term)
+            )
+        )
 
     return query.count()
 
@@ -171,7 +225,9 @@ def count_videos_by_user(
 def count_all_videos(
     db: Session,
     status_filter: Optional[str] = None,
-    user_filter: Optional[uuid.UUID] = None
+    user_filter: Optional[uuid.UUID] = None,
+    search: Optional[str] = None,
+    include_deleted: bool = False
 ) -> int:
     """
     Count all videos (admin function)
@@ -180,17 +236,33 @@ def count_all_videos(
         db: Database session
         status_filter: Optional status filter
         user_filter: Optional user filter
+        search: Optional search term for filename
+        include_deleted: Include soft-deleted videos
 
     Returns:
         Number of videos
     """
     query = db.query(VideoRecord)
 
+    # Filter out deleted videos unless specifically requested
+    if not include_deleted:
+        query = query.filter(VideoRecord.is_deleted == False)
+
     if status_filter:
         query = query.filter(VideoRecord.analysis_status == status_filter)
 
     if user_filter:
         query = query.filter(VideoRecord.uploaded_by == user_filter)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                VideoRecord.original_filename.ilike(search_term),
+                VideoRecord.description.ilike(search_term),
+                VideoRecord.tags.ilike(search_term)
+            )
+        )
 
     return query.count()
 
@@ -262,13 +334,14 @@ def update_analysis_status(
     return video
 
 
-def soft_delete_video(db: Session, video_id: uuid.UUID) -> bool:
+def soft_delete_video(db: Session, video_id: uuid.UUID, deleted_by: Optional[uuid.UUID] = None) -> bool:
     """
     Soft delete a video record (mark as inactive/deleted)
 
     Args:
         db: Database session
         video_id: UUID of the video
+        deleted_by: UUID of user performing deletion
 
     Returns:
         True if deleted, False if not found
@@ -278,8 +351,11 @@ def soft_delete_video(db: Session, video_id: uuid.UUID) -> bool:
     if not video:
         return False
 
-    # Mark as failed/deleted status instead of hard delete
-    video.analysis_status = "deleted"
+    video.is_deleted = True
+    video.deleted_at = func.now()
+    if deleted_by:
+        video.deleted_by = deleted_by
+
     db.commit()
     return True
 

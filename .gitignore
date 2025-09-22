@@ -126,8 +126,6 @@ thermal-env/
 *.db
 *.sqlite
 *.sqlite3
-alembic/versions/*.py
-!alembic/versions/README
 
 # Python backend specific
 apps/api/.env

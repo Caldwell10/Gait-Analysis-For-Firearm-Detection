@@ -20,8 +20,12 @@ class VideoMetadataResponse(BaseModel):
     original_filename: str
     file_size: str
     duration: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
+    subject_id: Optional[str] = None
     analysis_status: str
     video_metadata: Optional[Dict[str, Any]] = None
+    is_deleted: bool = False
     uploaded_by: str
     created_at: datetime
     updated_at: datetime
@@ -39,6 +43,9 @@ class VideoListResponse(BaseModel):
 class VideoUpdateRequest(BaseModel):
     """Request schema for updating video metadata"""
     original_filename: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
+    subject_id: Optional[str] = None
     analysis_status: Optional[str] = Field(None, pattern="^(pending|processing|completed|failed)$")
 
 

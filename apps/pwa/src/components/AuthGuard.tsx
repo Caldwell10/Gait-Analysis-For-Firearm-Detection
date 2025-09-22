@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSession } from '../lib/session';
 
-const PUBLIC_ROUTES = ['/login', '/signup', '/2fa/setup', '/2fa/verify', '/forgot-password', '/reset-password'];
+const PUBLIC_ROUTES = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/auth/reset-password'];
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -23,8 +23,8 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 
     if (!isAuthenticated && !isPublicRoute) {
       // Redirect unauthenticated users to login
-      router.push('/login');
-    } else if (isAuthenticated && (pathname === '/login' || pathname === '/signup')) {
+      router.push('/auth/login');
+    } else if (isAuthenticated && (pathname === '/auth/login' || pathname === '/auth/signup')) {
       // Redirect authenticated users away from login/signup
       router.push('/dashboard');
     }
