@@ -98,6 +98,8 @@ async def list_videos(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     status: Optional[str] = Query(None, description="Filter by analysis status"),
+    search: Optional[str] = Query(None, description="Search in filename, description, or tags"),
+    include_deleted: bool = Query(False, description="Include soft-deleted videos"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -107,6 +109,8 @@ async def list_videos(
     - **page**: Page number (starts at 1)
     - **per_page**: Number of items per page (max 100)
     - **status**: Optional filter by analysis status
+    - **search**: Optional search in filename, description, or tags
+    - **include_deleted**: Include soft-deleted videos (default: false)
     - Regular users see only their videos
     - Admins can see all videos
     """
@@ -119,11 +123,15 @@ async def list_videos(
             db=db,
             skip=skip,
             limit=per_page,
-            status_filter=status
+            status_filter=status,
+            search=search,
+            include_deleted=include_deleted
         )
         total = video_crud.count_all_videos(
             db=db,
-            status_filter=status
+            status_filter=status,
+            search=search,
+            include_deleted=include_deleted
         )
     else:
         # Regular users see only their videos
@@ -132,12 +140,16 @@ async def list_videos(
             user_id=current_user.id,
             skip=skip,
             limit=per_page,
-            status_filter=status
+            status_filter=status,
+            search=search,
+            include_deleted=include_deleted
         )
         total = video_crud.count_videos_by_user(
             db=db,
             user_id=current_user.id,
-            status_filter=status
+            status_filter=status,
+            search=search,
+            include_deleted=include_deleted
         )
 
     # Convert to response format
@@ -148,8 +160,12 @@ async def list_videos(
             original_filename=video.original_filename,
             file_size=video.file_size,
             duration=video.duration,
+            description=video.description,
+            tags=video.tags,
+            subject_id=video.subject_id,
             analysis_status=video.analysis_status,
             video_metadata=video.video_metadata,
+            is_deleted=video.is_deleted,
             uploaded_by=str(video.uploaded_by),
             created_at=video.created_at,
             updated_at=video.updated_at
@@ -210,8 +226,12 @@ async def get_video(
         original_filename=video.original_filename,
         file_size=video.file_size,
         duration=video.duration,
+        description=video.description,
+        tags=video.tags,
+        subject_id=video.subject_id,
         analysis_status=video.analysis_status,
         video_metadata=video.video_metadata,
+        is_deleted=video.is_deleted,
         uploaded_by=str(video.uploaded_by),
         created_at=video.created_at,
         updated_at=video.updated_at
@@ -274,8 +294,12 @@ async def update_video(
         original_filename=updated_video.original_filename,
         file_size=updated_video.file_size,
         duration=updated_video.duration,
+        description=updated_video.description,
+        tags=updated_video.tags,
+        subject_id=updated_video.subject_id,
         analysis_status=updated_video.analysis_status,
         video_metadata=updated_video.video_metadata,
+        is_deleted=updated_video.is_deleted,
         uploaded_by=str(updated_video.uploaded_by),
         created_at=updated_video.created_at,
         updated_at=updated_video.updated_at
@@ -285,6 +309,7 @@ async def update_video(
 @router.delete("/{video_id}")
 async def delete_video(
     video_id: str,
+    hard_delete: bool = Query(False, description="Permanently delete (default: soft delete)"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -292,6 +317,7 @@ async def delete_video(
     Delete a video and its associated files
 
     - **video_id**: UUID of the video
+    - **hard_delete**: If true, permanently delete; otherwise soft delete (default: false)
     - Users can only delete their own videos
     - Admins can delete any video
     """
@@ -319,26 +345,46 @@ async def delete_video(
             detail="Video not found"
         )
 
-    # Delete files from disk
-    file_deleted = delete_video_files(
-        user_id=str(video.uploaded_by),
-        video_id=str(video.id)
-    )
-
-    # Delete database record
-    db_deleted = video_crud.hard_delete_video(db=db, video_id=video_uuid)
-
-    if not db_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete video from database"
+    if hard_delete:
+        # Delete files from disk
+        file_deleted = delete_video_files(
+            user_id=str(video.uploaded_by),
+            video_id=str(video.id)
         )
 
-    return {
-        "message": "Video deleted successfully",
-        "video_id": video_id,
-        "files_deleted": file_deleted
-    }
+        # Delete database record
+        db_deleted = video_crud.hard_delete_video(db=db, video_id=video_uuid)
+
+        if not db_deleted:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete video from database"
+            )
+
+        return {
+            "message": "Video permanently deleted",
+            "video_id": video_id,
+            "files_deleted": file_deleted
+        }
+    else:
+        # Soft delete
+        db_deleted = video_crud.soft_delete_video(
+            db=db,
+            video_id=video_uuid,
+            deleted_by=current_user.id
+        )
+
+        if not db_deleted:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete video from database"
+            )
+
+        return {
+            "message": "Video soft deleted successfully",
+            "video_id": video_id,
+            "files_deleted": False
+        }
 
 
 @router.patch("/{video_id}/status", response_model=VideoMetadataResponse)
@@ -392,8 +438,12 @@ async def update_analysis_status(
         original_filename=updated_video.original_filename,
         file_size=updated_video.file_size,
         duration=updated_video.duration,
+        description=updated_video.description,
+        tags=updated_video.tags,
+        subject_id=updated_video.subject_id,
         analysis_status=updated_video.analysis_status,
         video_metadata=updated_video.video_metadata,
+        is_deleted=updated_video.is_deleted,
         uploaded_by=str(updated_video.uploaded_by),
         created_at=updated_video.created_at,
         updated_at=updated_video.updated_at

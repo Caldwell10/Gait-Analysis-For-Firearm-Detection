@@ -66,25 +66,17 @@ export interface LoginData {
 }
 
 export interface LoginResponse {
-  totp_required: boolean;
+  message: string;
 }
 
-export interface TotpSetupResponse {
-  secret: string;
-  otpauth_url: string;
-}
-
-export interface TotpVerifyData {
-  code: string;
-}
-
-export interface TotpVerifyResponse {
-  verified: boolean;
-}
 
 export interface UserData {
+  id: string;
   email: string;
-  totp_enabled: boolean;
+  role: string;
+  last_login?: string;
+  created_at: string;
+  is_active: boolean;
 }
 
 export interface ForgotPasswordData {
@@ -94,6 +86,47 @@ export interface ForgotPasswordData {
 export interface ResetPasswordData {
   token: string;
   password: string;
+}
+
+export interface VideoMetadata {
+  id: string;
+  filename: string;
+  original_filename: string;
+  file_size: string;
+  duration?: string;
+  description?: string;
+  tags?: string;
+  subject_id?: string;
+  analysis_status: string;
+  video_metadata?: Record<string, any>;
+  is_deleted: boolean;
+  uploaded_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VideoListResponse {
+  videos: VideoMetadata[];
+  total: number;
+  page: number;
+  per_page: number;
+  has_next: boolean;
+}
+
+export interface VideoUploadResponse {
+  message: string;
+  video_id: string;
+  filename: string;
+  file_size: string;
+  status: string;
+}
+
+export interface VideoUpdateRequest {
+  original_filename?: string;
+  description?: string;
+  tags?: string;
+  subject_id?: string;
+  analysis_status?: string;
 }
 
 export const api = {
@@ -111,18 +144,6 @@ export const api = {
     });
   },
 
-  async totpSetup(): Promise<TotpSetupResponse> {
-    return apiRequest('/auth/totp/setup', {
-      method: 'POST',
-    });
-  },
-
-  async totpVerify(data: TotpVerifyData): Promise<TotpVerifyResponse> {
-    return apiRequest('/auth/totp/verify', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
 
   async me(): Promise<UserData> {
     return apiRequest('/auth/me');
@@ -145,6 +166,54 @@ export const api = {
     return apiRequest('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  // Video APIs
+  async getVideos(params?: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+    search?: string;
+    include_deleted?: boolean;
+  }): Promise<VideoListResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.set('page', params.page.toString());
+    if (params?.per_page) queryParams.set('per_page', params.per_page.toString());
+    if (params?.status) queryParams.set('status', params.status);
+    if (params?.search) queryParams.set('search', params.search);
+    if (params?.include_deleted) queryParams.set('include_deleted', 'true');
+
+    const query = queryParams.toString();
+    return apiRequest(`/api/videos${query ? `?${query}` : ''}`);
+  },
+
+  async getVideo(videoId: string): Promise<VideoMetadata> {
+    return apiRequest(`/api/videos/${videoId}`);
+  },
+
+  async updateVideo(videoId: string, data: VideoUpdateRequest): Promise<VideoMetadata> {
+    return apiRequest(`/api/videos/${videoId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteVideo(videoId: string, hardDelete: boolean = false): Promise<{ message: string; video_id: string; files_deleted: boolean }> {
+    const queryParams = hardDelete ? '?hard_delete=true' : '';
+    return apiRequest(`/api/videos/${videoId}${queryParams}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async uploadVideo(file: File): Promise<VideoUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return apiRequest('/api/videos/upload', {
+      method: 'POST',
+      body: formData,
+      headers: {}, // Remove Content-Type to let browser set it for FormData
     });
   },
 };

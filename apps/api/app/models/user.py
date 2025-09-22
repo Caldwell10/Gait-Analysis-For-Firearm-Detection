@@ -58,14 +58,24 @@ class VideoRecord(Base):
     file_path = Column(Text, nullable=False)
     file_size = Column(String(50), nullable=False)  # e.g., "15.5MB"
     duration = Column(String(20), nullable=True)  # e.g., "00:02:15"
-    
-    # Video metadata (JSON field for flexibility)
+
+    # User-editable metadata
+    description = Column(Text, nullable=True)  # User description of video content
+    tags = Column(Text, nullable=True)  # Comma-separated tags for categorization
+    subject_id = Column(String(100), nullable=True)  # Subject identifier if known
+
+    # Video metadata (JSON field for technical details)
     video_metadata = Column(JSON, nullable=True)  # resolution, fps, format, etc.
-    
+
     # Analysis status
     analysis_status = Column(String(50), default="pending", nullable=False)  # pending, processing, completed, failed
     analysis_results = Column(JSON, nullable=True)  # Gait analysis results
-    
+
+    # Soft delete functionality
+    is_deleted = Column(Boolean, default=False, nullable=False, index=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by = Column(UUID(as_uuid=True), nullable=True, index=True)
+
     # User and timestamps
     uploaded_by = Column(UUID(as_uuid=True), nullable=False, index=True)
     analyzed_by = Column(UUID(as_uuid=True), nullable=True, index=True)
