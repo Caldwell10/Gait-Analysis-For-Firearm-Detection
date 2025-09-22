@@ -1,10 +1,17 @@
 import secrets
 import bcrypt
+import uuid
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from typing import Optional, Dict, Any
-from fastapi import HTTPException, status
+from typing import Optional, Dict, Any, TYPE_CHECKING
+from fastapi import HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
 from .config import settings
+from .database import get_db
+
+if TYPE_CHECKING:
+    from ..models.user import User
 
 
 def hash_password(password: str) -> str:
@@ -62,3 +69,38 @@ def hash_reset_token(token: str) -> str:
 def verify_reset_token(token: str, hashed_token: str) -> bool:
     """Verify a reset token against its hash."""
     return verify_password(token, hashed_token)
+
+
+security = HTTPBearer()
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get current authenticated user from JWT token."""
+    try:
+        payload = decode_access_token(credentials.credentials)
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials"
+            )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+    # Query user directly to avoid circular imports
+    user = db.execute(
+        "SELECT * FROM users WHERE id = %s", (user_id,)
+    ).fetchone()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    return user
