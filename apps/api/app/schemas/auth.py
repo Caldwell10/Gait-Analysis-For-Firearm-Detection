@@ -3,8 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr
 from ..models.user import UserRole
 
-
-# Request schemas (input validation)
+# Request schemas for input validation
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str
@@ -34,7 +33,7 @@ class UpdateUserRoleRequest(BaseModel):
     role: UserRole
 
 
-# Response schemas (output serialization)
+# Response schemas for output serialization
 class LoginResponse(BaseModel):
     message: str
 
@@ -57,8 +56,6 @@ class UsersListResponse(BaseModel):
     page: int
     per_page: int
 
-
-# Token schemas
 class TokenData(BaseModel):
     user_id: str
     email: str

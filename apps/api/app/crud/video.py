@@ -1,7 +1,7 @@
 import uuid
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc
+from sqlalchemy import and_, or_, desc, func
 
 from ..models.user import VideoRecord
 from ..schemas.video import VideoUpdateRequest, VideoAnalysisStatusUpdate
