@@ -1,6 +1,7 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
@@ -10,7 +11,13 @@ from ..core.file_handler import (
     get_file_size_mb,
     save_uploaded_file,
     delete_video_files,
-    FileValidationError
+    FileValidationError,
+    get_video_file_path,
+    create_file_response,
+    create_streaming_response,
+    get_file_info,
+    get_storage_stats,
+    cleanup_orphaned_files
 )
 from ..crud import video as video_crud
 from ..models.user import User, VideoRecord, UserRole
@@ -448,3 +455,248 @@ async def update_analysis_status(
         created_at=updated_video.created_at,
         updated_at=updated_video.updated_at
     )
+
+@router.get("/{video_id}/download")
+async def download_video(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Download video file with secure access control
+
+    - **video_id**: UUID of the video
+    - Users can only download their own videos (unless admin)
+    - Returns file with proper headers for download
+    """
+    try:
+        video_uuid = uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video ID format"
+        )
+
+    # Check if video exists and user has access
+    if current_user.role == UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=video_uuid)
+    else:
+        video = video_crud.get_video_by_id_and_user(
+            db=db,
+            video_id=video_uuid,
+            user_id=current_user.id
+        )
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or access denied"
+        )
+
+    # Get the actual file path
+    file_path = get_video_file_path(
+        user_id=str(video.uploaded_by),
+        video_id=str(video.id)
+    )
+
+    if not file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video file not found on disk"
+        )
+
+    # Create secure file response
+    return create_file_response(
+        file_path=file_path,
+        filename=video.original_filename
+    )
+
+
+@router.get("/{video_id}/stream")
+async def stream_video(
+    video_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Stream video file with range support for video players
+
+    - **video_id**: UUID of the video
+    - Supports HTTP range requests for efficient video streaming
+    - Users can only stream their own videos (unless admin)
+    """
+    try:
+        video_uuid = uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video ID format"
+        )
+
+    # Check if video exists and user has access
+    if current_user.role == UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=video_uuid)
+    else:
+        video = video_crud.get_video_by_id_and_user(
+            db=db,
+            video_id=video_uuid,
+            user_id=current_user.id
+        )
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or access denied"
+        )
+
+    # Get the actual file path
+    file_path = get_video_file_path(
+        user_id=str(video.uploaded_by),
+        video_id=str(video.id)
+    )
+
+    if not file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video file not found on disk"
+        )
+
+    # Get range header for partial content requests
+    range_header = request.headers.get('range')
+
+    # Create streaming response
+    return create_streaming_response(
+        file_path=file_path,
+        range_header=range_header
+    )
+
+
+@router.get("/{video_id}/info")
+async def get_video_file_info(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed file information for a video
+
+    - **video_id**: UUID of the video
+    - Returns file metadata, size, MIME type, etc.
+    - Users can only access info for their own videos (unless admin)
+    """
+    try:
+        video_uuid = uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video ID format"
+        )
+
+    # Check if video exists and user has access
+    if current_user.role == UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=video_uuid)
+    else:
+        video = video_crud.get_video_by_id_and_user(
+            db=db,
+            video_id=video_uuid,
+            user_id=current_user.id
+        )
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or access denied"
+        )
+
+    # Get the actual file path
+    file_path = get_video_file_path(
+        user_id=str(video.uploaded_by),
+        video_id=str(video.id)
+    )
+
+    if not file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video file not found on disk"
+        )
+
+    # Get detailed file information
+    file_info = get_file_info(file_path)
+    if not file_info:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve file information"
+        )
+
+    return {
+        "video_id": video_id,
+        "database_info": {
+            "original_filename": video.original_filename,
+            "file_size": video.file_size,
+            "analysis_status": video.analysis_status,
+            "created_at": video.created_at,
+            "updated_at": video.updated_at
+        },
+        "file_info": file_info,
+        "file_path": str(file_path)
+    }
+
+
+@router.get("/storage/stats")
+async def get_storage_statistics(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get storage usage statistics
+
+    - Only admins can access storage statistics
+    - Returns disk usage, file counts, and storage information
+    """
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can access storage statistics"
+        )
+
+    stats = get_storage_stats()
+    return {
+        "storage_statistics": stats,
+        "timestamp": "2024-01-01T00:00:00Z"
+    }
+
+
+@router.post("/storage/cleanup")
+async def cleanup_storage(
+    execute: bool = Query(False, description="Actually perform cleanup (default: dry run)"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Clean up orphaned files and storage
+
+    - **execute**: Set to true to actually perform cleanup (default: false for dry run)
+    - Only admins can perform storage cleanup
+    - Returns list of files that would be/were cleaned up
+    """
+    if current_user.role != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can perform storage cleanup"
+        )
+
+    # Get orphaned files
+    cleanup_results = cleanup_orphaned_files()
+
+    if execute:
+        # TODO: Implement actual cleanup (requires database cross-reference)
+        # For now, just return what would be cleaned up
+        cleanup_results["action"] = "Dry run only - actual cleanup not implemented yet"
+        cleanup_results["executed"] = False
+    else:
+        cleanup_results["action"] = "Dry run - no files were actually deleted"
+        cleanup_results["executed"] = False
+
+    return {
+        "cleanup_results": cleanup_results,
+        "timestamp": "2024-01-01T00:00:00Z"
+    }
