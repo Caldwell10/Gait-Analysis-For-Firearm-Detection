@@ -182,6 +182,13 @@ apps/api/analysis.log
 .coverage
 htmlcov/
 
+# Testing artifacts
+test.db
+*.test.db
+test_*.sqlite
+tests/temp/
+tests/uploads/
+
 # Additional security
 apps/api/.env.*
 !apps/api/.env.example
