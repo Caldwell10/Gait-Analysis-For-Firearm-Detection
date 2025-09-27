@@ -3,7 +3,6 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    # Database
     database_url: str = "postgresql://thermal_user:thermal_password@localhost:5432/thermal_gait_db"
     
     # Security
@@ -22,10 +21,10 @@ class Settings(BaseSettings):
     first_admin_email: str = "wachirakibe6@gmail.com"
     first_admin_password: str = "admin123"
     
-    # CORS - simplified to avoid JSON parsing issues
+    # CORS settings
     allowed_origins_str: str = "http://localhost:3000,http://127.0.0.1:3000"
     
-    # Video storage (for gait analysis)
+    # Video storage for gait analysis
     video_upload_dir: str = "./uploads/videos"
     max_video_size_mb: int = 500
     

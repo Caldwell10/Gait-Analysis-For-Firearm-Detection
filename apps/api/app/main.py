@@ -5,6 +5,7 @@ from .core.config import settings
 from .core.database import create_tables
 from .api.auth import router as auth_router
 from .api.videos import router as videos_router
+from .api.analysis import router as analysis_router
 from .crud.user import get_users_count, create_user
 from .models.user import UserRole
 from .core.database import SessionLocal
@@ -65,6 +66,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(videos_router, prefix="/api")
+app.include_router(analysis_router, prefix="/api")
 
 
 @app.get("/")

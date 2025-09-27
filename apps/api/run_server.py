@@ -1,9 +1,3 @@
-
-"""
-Development server runner for the authentication API.
-This script helps start the server with proper settings.
-"""
-
 import uvicorn
 import os
 import sys

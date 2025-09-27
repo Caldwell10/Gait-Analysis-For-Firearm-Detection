@@ -9,9 +9,9 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.config import settings
 from app.core.database import Base
-from app.models import *  # Import all models
+from app.models import *  
 
-# this is the Alembic Config object
+# Alembic Config object
 config = context.config
 
 # Override sqlalchemy.url with our settings
@@ -21,7 +21,7 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here for 'autogenerate' support
+# add model's MetaData object 
 target_metadata = Base.metadata
 
 
