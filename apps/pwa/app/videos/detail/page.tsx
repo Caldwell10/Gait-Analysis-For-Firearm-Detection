@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSearchParams } from 'next/navigation';
 import Button from '../../../src/components/ui/Button';
-import { api, ApiError, VideoMetadata, VideoUpdateRequest } from '../../../src/lib/api';
+import { api, ApiError, VideoMetadata, VideoUpdateRequest, getAuthToken } from '../../../src/lib/api';
 import { useSession } from '../../../src/lib/session';
 
 export default function VideoDetailPage() {
@@ -14,7 +14,11 @@ export default function VideoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<VideoUpdateRequest>({});
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(true);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
   const { user } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,11 +50,75 @@ export default function VideoDetailPage() {
     }
   };
 
+  const loadVideoUrl = async () => {
+    if (!videoId || !video) return;
+
+    try {
+      setVideoLoading(true);
+      setVideoError(null);
+
+      // Fetch video with proper authentication
+      const headers: HeadersInit = {
+        'Accept': 'video/*',
+      };
+
+      // Add Authorization header if token exists
+      const token = getAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/videos/${videoId}/stream`,
+        {
+          credentials: 'include',
+          headers,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to load video: ${response.status}`);
+      }
+
+      // Create blob URL from the response
+      const blob = await response.blob();
+      console.log('Blob created:', {
+        size: blob.size,
+        type: blob.type,
+        url: response.url
+      });
+
+      const url = URL.createObjectURL(blob);
+      console.log('Blob URL created:', url);
+      setVideoUrl(url);
+      setVideoLoading(false);
+    } catch (err) {
+      console.error('Failed to load video stream:', err);
+      setVideoError('Failed to load video. Please check your connection and try again.');
+      setVideoLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (user && videoId) {
       fetchVideo();
     }
   }, [user, videoId]);
+
+  useEffect(() => {
+    if (video && !videoUrl) {
+      loadVideoUrl();
+    }
+  }, [video, videoUrl]);
+
+  // Cleanup blob URL when component unmounts or video changes
+  useEffect(() => {
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
+  }, [videoUrl]);
 
   const handleSave = async () => {
     if (!video) return;
@@ -199,6 +267,109 @@ export default function VideoDetailPage() {
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Video Player Card */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                  Video Playback
+                </h3>
+                <div className="w-full">
+                  {videoError ? (
+                    <div className="w-full h-64 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">Video Unavailable</h3>
+                        <p className="mt-1 text-sm text-gray-500">{videoError}</p>
+                        <button
+                          onClick={() => {
+                            setVideoError(null);
+                            setVideoUrl(null);
+                            loadVideoUrl();
+                          }}
+                          className="mt-3 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          Try Again
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      {videoLoading && (
+                        <div className="absolute inset-0 bg-gray-900 rounded-lg flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+                            <p className="mt-2 text-sm text-white">Loading video...</p>
+                          </div>
+                        </div>
+                      )}
+                      <video
+                        ref={videoRef}
+                        controls
+                        className="w-full h-auto max-h-96 bg-gray-900 rounded-lg"
+                        preload="metadata"
+                        style={{ maxWidth: '100%' }}
+                        src={videoUrl || undefined}
+                        onLoadStart={() => setVideoLoading(true)}
+                        onCanPlay={() => setVideoLoading(false)}
+                        onError={(e) => {
+                          setVideoLoading(false);
+                          const videoElement = e.target as HTMLVideoElement;
+                          const error = videoElement.error;
+                          let errorMessage = 'Failed to load video. Please check your connection and try again.';
+
+                          if (error) {
+                            switch (error.code) {
+                              case MediaError.MEDIA_ERR_ABORTED:
+                                errorMessage = 'Video playback was aborted.';
+                                break;
+                              case MediaError.MEDIA_ERR_NETWORK:
+                                errorMessage = 'Network error occurred while loading video.';
+                                break;
+                              case MediaError.MEDIA_ERR_DECODE:
+                                errorMessage = 'Video format not supported or corrupted.';
+                                break;
+                              case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                                errorMessage = 'Video format not supported by browser.';
+                                break;
+                              default:
+                                errorMessage = `Video error: ${error.message || 'Unknown error'}`;
+                            }
+                          }
+
+                          setVideoError(errorMessage);
+                          console.error('Video playback error:', {
+                            event: e,
+                            error: error,
+                            errorCode: error?.code,
+                            errorMessage: error?.message,
+                            videoSrc: videoElement.src
+                          });
+                        }}
+                        onLoadedMetadata={() => {
+                          setVideoLoading(false);
+                          console.log('Video metadata loaded successfully');
+                        }}
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    </div>
+                  )}
+                  <div className="mt-2 flex justify-between items-center">
+                    <div className="text-xs text-gray-500">
+                      Using streaming endpoint with range support for efficient playback
+                    </div>
+                    {!videoError && (
+                      <div className="text-xs text-gray-500">
+                        File: {video.original_filename} ({video.file_size})
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Video Info Card */}
             <div className="bg-white shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
@@ -346,6 +517,50 @@ export default function VideoDetailPage() {
                   Actions
                 </h3>
                 <div className="space-y-3">
+                  {!video.is_deleted && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const headers: HeadersInit = {};
+                          const token = getAuthToken();
+                          if (token) {
+                            headers['Authorization'] = `Bearer ${token}`;
+                          }
+
+                          const response = await fetch(
+                            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/videos/${video.id}/download`,
+                            {
+                              credentials: 'include',
+                              headers,
+                            }
+                          );
+
+                          if (response.ok) {
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = video.original_filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                          } else {
+                            alert('Failed to download video');
+                          }
+                        } catch (error) {
+                          alert('Download failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+                        }
+                      }}
+                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    >
+                      <svg className="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-4-4m4 4l4-4m6-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-4" />
+                      </svg>
+                      Download Video
+                    </button>
+                  )}
+
                   {!video.is_deleted ? (
                     <Button
                       variant="secondary"

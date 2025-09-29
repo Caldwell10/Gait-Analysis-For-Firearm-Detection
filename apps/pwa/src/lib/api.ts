@@ -155,10 +155,17 @@ export const api = {
   },
 
   async login(data: LoginData): Promise<LoginResponse> {
-    return apiRequest('/auth/login', {
+    const response = await apiRequest<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+
+    // Store the token for subsequent requests
+    if (response.access_token) {
+      setAuthToken(response.access_token);
+    }
+
+    return response;
   },
 
 
@@ -167,9 +174,14 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    return apiRequest('/auth/logout', {
+    const response = await apiRequest('/auth/logout', {
       method: 'POST',
     });
+
+    // Clear the stored token
+    setAuthToken(null);
+
+    return response;
   },
 
   async forgotPassword(data: ForgotPasswordData): Promise<void> {
