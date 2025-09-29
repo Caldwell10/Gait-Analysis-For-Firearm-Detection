@@ -1,5 +1,14 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Simple token storage (in production, use secure storage)
+let currentToken: string | null = null;
+
+export const setAuthToken = (token: string | null) => {
+  currentToken = token;
+};
+
+export const getAuthToken = () => currentToken;
+
 class ApiError extends Error {
   constructor(
     message: string,
@@ -16,12 +25,19 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...options.headers as Record<string, string>,
+  };
+
+  // Add Authorization header if token exists
+  if (currentToken) {
+    headers['Authorization'] = `Bearer ${currentToken}`;
+  }
+
   const config: RequestInit = {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
     ...options,
   };
 
@@ -67,6 +83,7 @@ export interface LoginData {
 
 export interface LoginResponse {
   message: string;
+  access_token?: string;
 }
 
 
@@ -210,11 +227,45 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
 
-    return apiRequest('/api/videos/upload', {
+    // For file uploads, we need to handle headers differently
+    const headers: Record<string, string> = {};
+
+    // Add Authorization header if token exists
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
+    }
+
+    const url = `${API_BASE_URL}/api/videos/upload`;
+    const config: RequestInit = {
       method: 'POST',
+      credentials: 'include',
+      headers, // Don't set Content-Type for FormData
       body: formData,
-      headers: {}, // Remove Content-Type to let browser set it for FormData
-    });
+    };
+
+    try {
+      const response = await fetch(url, config);
+
+      if (!response.ok) {
+        let errorMessage = 'Upload failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+
+        throw new ApiError(errorMessage, response.status);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError('Network error', 0);
+    }
   },
 };
 

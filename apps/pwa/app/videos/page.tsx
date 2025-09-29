@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { api, ApiError } from '../../src/lib/api'
 
 export default function VideosPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -42,34 +43,23 @@ export default function VideosPage() {
     setUploadProgress(0)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
       setMessage('Uploading file...')
       setUploadProgress(25)
 
-      const response = await fetch('http://localhost:8000/api/videos/upload', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      })
+      const result = await api.uploadVideo(file)
 
-      setUploadProgress(75)
-
-      if (response.ok) {
-        setUploadProgress(100)
-        const result = await response.json()
-        setMessage(`✅ Upload successful! Video ID: ${result.video_id}`)
-        setFile(null)
-        // Reset file input
-        const fileInput = document.getElementById('file-input') as HTMLInputElement
-        if (fileInput) fileInput.value = ''
-      } else {
-        const error = await response.json()
-        setMessage(`❌ Upload failed: ${error.detail || 'Unknown error'}`)
-      }
+      setUploadProgress(100)
+      setMessage(`✅ Upload successful! Video ID: ${result.video_id}`)
+      setFile(null)
+      // Reset file input
+      const fileInput = document.getElementById('file-input') as HTMLInputElement
+      if (fileInput) fileInput.value = ''
     } catch (error) {
-      setMessage(`❌ Upload failed: ${error instanceof Error ? error.message : 'Network error'}`)
+      if (error instanceof ApiError) {
+        setMessage(`❌ Upload failed: ${error.message}`)
+      } else {
+        setMessage(`❌ Upload failed: ${error instanceof Error ? error.message : 'Network error'}`)
+      }
     } finally {
       setUploading(false)
       setUploadProgress(0)
@@ -140,21 +130,6 @@ export default function VideosPage() {
           >
             {uploading ? 'Uploading...' : 'Upload Video'}
           </button>
-        </div>
-
-        <div className="mt-8 pt-6 border-t">
-          <h2 className="text-lg font-semibold mb-4">API Testing</h2>
-          <p className="text-sm text-gray-600 mb-2">
-            You can also test the API directly at:
-          </p>
-          <a
-            href="http://localhost:8000/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-          >
-            http://localhost:8000/docs
-          </a>
         </div>
       </div>
     </div>

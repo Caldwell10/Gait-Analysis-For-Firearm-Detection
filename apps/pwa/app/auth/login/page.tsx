@@ -10,7 +10,7 @@ import TextField from '../../../src/components/ui/TextField';
 import PasswordField from '../../../src/components/ui/PasswordField';
 import Button from '../../../src/components/ui/Button';
 import FormError from '../../../src/components/ui/FormError';
-import { api, ApiError } from '../../../src/lib/api';
+import { api, ApiError, setAuthToken } from '../../../src/lib/api';
 import { useSession } from '../../../src/lib/session';
 
 const loginSchema = z.object({
@@ -40,7 +40,15 @@ export default function LoginPage() {
       setServerError(null);
       
       const response = await api.login(data);
-      
+
+      // Store the token for future requests
+      if (response.access_token) {
+        setAuthToken(response.access_token);
+      }
+
+      // Small delay to ensure token is set before refreshing session
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Refresh session to get user data
       await refreshSession();
 
@@ -101,7 +109,7 @@ export default function LoginPage() {
           <span className="text-sm text-gray-600">
             Don't have an account?{' '}
             <a
-              href="/signup"
+              href="/auth/signup"
               className="font-medium text-indigo-600 hover:text-indigo-500"
             >
               Sign up

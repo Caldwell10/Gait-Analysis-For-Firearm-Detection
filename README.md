@@ -1,4 +1,3 @@
-
 # Thermal Gait Surveillance System
 
 A comprehensive security surveillance system that uses thermal gait analysis to detect concealed firearms. This Progressive Web Application (PWA) combines advanced machine learning with modern web technologies to provide real-time threat assessment capabilities.
@@ -258,6 +257,35 @@ cd apps/pwa
 npm test
 ```
 
+### API Testing
+- Interactive docs: http://localhost:8000/docs
+- Test all endpoints with built-in Swagger UI
+- Authentication testing with sample credentials
+
+## 📊 Development Status
+
+### ✅ Completed Features (Sprint 1 & 2)
+- User authentication and authorization
+- Video upload and management system
+- Analysis CRUD operations with mock data
+- File streaming and secure storage
+- Role-based access control
+- Professional PWA interface
+- RESTful API with full documentation
+
+### 🚧 In Development (Sprint 3)
+- Real ML model integration
+- Async video processing pipeline
+- Real-time analysis status updates
+- GEI image generation and display
+- Advanced reporting and analytics
+
+### 📈 Future Enhancements
+- Real-time video stream analysis
+- Multi-camera support and coordination
+- Advanced threat classification
+- Integration with security systems
+- Mobile app development
 
 
 

@@ -192,3 +192,5 @@ tests/uploads/
 # Additional security
 apps/api/.env.*
 !apps/api/.env.example
+
+cookies.txt

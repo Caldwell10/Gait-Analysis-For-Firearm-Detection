@@ -27,8 +27,16 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 
 # Dependency to get current user from JWT token
 async def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    """Get current authenticated user from JWT token in cookies."""
+    """Get current authenticated user from JWT token in cookies or Authorization header."""
+    # Try cookie first (for same-origin requests)
     token = request.cookies.get("access_token")
+
+    # If no cookie, try Authorization header (for cross-origin requests)
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -125,12 +133,14 @@ async def login(user_data: LoginRequest, response: Response, db: Session = Depen
         key="access_token",
         value=token,
         max_age=900,  # 15 minutes
-        httponly=True,
+        httponly=False,  # Temporarily disable HttpOnly for debugging
         secure=False,  # Set to False for localhost development
-        samesite="lax"
+        samesite="lax",
+        path="/",  # Explicitly set path
+        domain=None  # Allow cross-origin requests in development
     )
     
-    return LoginResponse(message="Login successful")
+    return LoginResponse(message="Login successful", access_token=token)
 
 
 @router.post("/logout")
