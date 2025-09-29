@@ -172,6 +172,9 @@ apps/api/ml/outputs/
 *.tmp.mp4
 *.tmp.avi
 *.processing
+*_h264.mp4
+*_converted.*
+/tmp/test_h264.mp4
 
 # Additional log patterns
 apps/api/processing.log
@@ -194,3 +197,21 @@ apps/api/.env.*
 !apps/api/.env.example
 
 cookies.txt
+
+# Development debugging and screenshots
+screenshots/
+debug_*.png
+debug_*.jpg
+blob_debug/
+video_debug/
+
+# Browser and development artifacts
+.vercel/
+.expo/
+.next/
+storybook-static/
+
+# Authentication/session artifacts
+*.session
+session_*
+auth_debug.json
