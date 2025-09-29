@@ -172,8 +172,12 @@ apps/api/ml/outputs/
 *.tmp.mp4
 *.tmp.avi
 *.processing
+*_h264.mp4
+*_converted.*
+/tmp/test_h264.mp4
 
 # Additional log patterns
+
 apps/api/processing.log
 apps/api/analysis.log
 
@@ -194,3 +198,4 @@ apps/api/.env.*
 !apps/api/.env.example
 
 cookies.txt
+
