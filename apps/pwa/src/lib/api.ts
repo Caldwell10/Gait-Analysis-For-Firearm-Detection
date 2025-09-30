@@ -4,6 +4,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const MAX_FILE_SIZE_MB = parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB || '100');
 const ML_CONFIDENCE_DEFAULT = parseFloat(process.env.NEXT_PUBLIC_ML_CONFIDENCE_DEFAULT || '0.75');
 const ML_THRESHOLD = parseFloat(process.env.NEXT_PUBLIC_ML_THRESHOLD || '0.179');
+const ML_MODEL_AUC = parseFloat(process.env.NEXT_PUBLIC_ML_MODEL_AUC || '0.881');
 
 // Simple token storage (in production, use secure storage)
 let currentToken: string | null = null;
@@ -285,4 +286,4 @@ export const api = {
   },
 };
 
-export { ApiError, MAX_FILE_SIZE_MB, ML_CONFIDENCE_DEFAULT, ML_THRESHOLD };
+export { ApiError, MAX_FILE_SIZE_MB, ML_CONFIDENCE_DEFAULT, ML_THRESHOLD, ML_MODEL_AUC };

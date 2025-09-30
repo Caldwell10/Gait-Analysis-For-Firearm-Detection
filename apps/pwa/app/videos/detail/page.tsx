@@ -266,330 +266,265 @@ export default function VideoDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
-            {/* Video Player Card */}
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Video Playback
-                </h3>
-                <div className="w-full">
-                  {videoError ? (
-                    <div className="w-full h-64 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <div className="text-center">
-                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">Video Unavailable</h3>
-                        <p className="mt-1 text-sm text-gray-500">{videoError}</p>
-                        <button
-                          onClick={() => {
-                            setVideoError(null);
-                            setVideoUrl(null);
-                            loadVideoUrl();
-                          }}
-                          className="mt-3 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                          Try Again
-                        </button>
-                      </div>
+          <div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column - Video Player */}
+              <div className="lg:col-span-2">
+                <div className="bg-white shadow-sm rounded-lg border">
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-gray-900">Video Playback</h2>
+                      <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(video.analysis_status)}`}>
+                        {video.analysis_status}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="relative">
-                      {videoLoading && (
-                        <div className="absolute inset-0 bg-gray-900 rounded-lg flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-                            <p className="mt-2 text-sm text-white">Loading video...</p>
+
+                    <div className="relative bg-gray-900 rounded-lg overflow-hidden">
+                      {videoError ? (
+                        <div className="aspect-video flex items-center justify-center">
+                          <div className="text-center text-white">
+                            <svg className="mx-auto h-12 w-12 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <p className="text-sm mb-3">{videoError}</p>
+                            <button
+                              onClick={() => {
+                                setVideoError(null);
+                                setVideoUrl(null);
+                                loadVideoUrl();
+                              }}
+                              className="inline-flex items-center px-3 py-2 border border-gray-600 text-sm font-medium rounded-md text-white bg-gray-700 hover:bg-gray-600"
+                            >
+                              Try Again
+                            </button>
                           </div>
                         </div>
-                      )}
-                      <video
-                        ref={videoRef}
-                        controls
-                        className="w-full h-auto max-h-96 bg-gray-900 rounded-lg"
-                        preload="metadata"
-                        style={{ maxWidth: '100%' }}
-                        src={videoUrl || undefined}
-                        onLoadStart={() => setVideoLoading(true)}
-                        onCanPlay={() => setVideoLoading(false)}
-                        onError={(e) => {
-                          setVideoLoading(false);
-                          const videoElement = e.target as HTMLVideoElement;
-                          const error = videoElement.error;
-                          let errorMessage = 'Failed to load video. Please check your connection and try again.';
-
-                          if (error) {
-                            switch (error.code) {
-                              case MediaError.MEDIA_ERR_ABORTED:
-                                errorMessage = 'Video playback was aborted.';
-                                break;
-                              case MediaError.MEDIA_ERR_NETWORK:
-                                errorMessage = 'Network error occurred while loading video.';
-                                break;
-                              case MediaError.MEDIA_ERR_DECODE:
-                                errorMessage = 'Video format not supported or corrupted.';
-                                break;
-                              case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                                errorMessage = 'Video format not supported by browser.';
-                                break;
-                              default:
-                                errorMessage = `Video error: ${error.message || 'Unknown error'}`;
-                            }
-                          }
-
-                          setVideoError(errorMessage);
-                          console.error('Video playback error:', {
-                            event: e,
-                            error: error,
-                            errorCode: error?.code,
-                            errorMessage: error?.message,
-                            videoSrc: videoElement.src
-                          });
-                        }}
-                        onLoadedMetadata={() => {
-                          setVideoLoading(false);
-                          console.log('Video metadata loaded successfully');
-                        }}
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                  )}
-                  <div className="mt-2 flex justify-between items-center">
-                    <div className="text-xs text-gray-500">
-                      Using streaming endpoint with range support for efficient playback
-                    </div>
-                    {!videoError && (
-                      <div className="text-xs text-gray-500">
-                        File: {video.original_filename} ({video.file_size})
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Video Info Card */}
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <h2 className="text-lg font-medium text-gray-900">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={formData.original_filename || ''}
-                          onChange={(e) => setFormData({ ...formData, original_filename: e.target.value })}
-                          className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                          placeholder="Filename"
-                        />
                       ) : (
-                        video.original_filename
+                        <>
+                          {videoLoading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                              <div className="text-center text-white">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                                <p className="text-sm">Loading video...</p>
+                              </div>
+                            </div>
+                          )}
+                          <video
+                            ref={videoRef}
+                            controls
+                            className="w-full aspect-video"
+                            preload="metadata"
+                            src={videoUrl || undefined}
+                            onLoadStart={() => setVideoLoading(true)}
+                            onCanPlay={() => setVideoLoading(false)}
+                            onError={(e) => {
+                              setVideoLoading(false);
+                              const videoElement = e.target as HTMLVideoElement;
+                              const error = videoElement.error;
+                              let errorMessage = 'Failed to load video. Please try again.';
+
+                              if (error) {
+                                switch (error.code) {
+                                  case MediaError.MEDIA_ERR_NETWORK:
+                                    errorMessage = 'Network error - check your connection.';
+                                    break;
+                                  case MediaError.MEDIA_ERR_DECODE:
+                                    errorMessage = 'Video format not supported.';
+                                    break;
+                                  default:
+                                    errorMessage = 'Video playback error.';
+                                }
+                              }
+                              setVideoError(errorMessage);
+                            }}
+                            onLoadedMetadata={() => setVideoLoading(false)}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </>
                       )}
-                      {video.is_deleted && (
-                        <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          Deleted
-                        </span>
+                    </div>
+
+                    <div className="mt-3 flex justify-between items-center text-sm text-gray-500">
+                      <span>{video.original_filename}</span>
+                      <span>{video.file_size}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Info Panel */}
+              <div className="space-y-6">
+                {/* Video Information */}
+                <div className="bg-white shadow-sm rounded-lg border">
+                  <div className="p-6">
+                    <h3 className="font-semibold text-gray-900 mb-4">Video Information</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-sm text-gray-500">Duration</span>
+                        <p className="font-medium">{video.duration || 'Unknown'}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Uploaded</span>
+                        <p className="font-medium">{formatDate(video.created_at)}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-500">Subject ID</span>
+                        <p className="font-medium">{video.subject_id || 'Not specified'}</p>
+                      </div>
+                      {video.description && (
+                        <div>
+                          <span className="text-sm text-gray-500">Description</span>
+                          <p className="font-medium">{video.description}</p>
+                        </div>
                       )}
-                    </h2>
-                    <p className="text-sm text-gray-500">Video ID: {video.id}</p>
-                  </div>
-                  <div className="ml-4">
-                    <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(video.analysis_status)}`}>
-                      {video.analysis_status}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">File Size</label>
-                    <p className="mt-1 text-sm text-gray-900">{video.file_size}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Duration</label>
-                    <p className="mt-1 text-sm text-gray-900">{video.duration || 'Unknown'}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Uploaded</label>
-                    <p className="mt-1 text-sm text-gray-900">{formatDate(video.created_at)}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Last Updated</label>
-                    <p className="mt-1 text-sm text-gray-900">{formatDate(video.updated_at)}</p>
+                      {video.tags && (
+                        <div>
+                          <span className="text-sm text-gray-500">Tags</span>
+                          <p className="font-medium">{video.tags}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Metadata Card */}
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Video Metadata
-                </h3>
+                {/* Actions */}
+                <div className="bg-white shadow-sm rounded-lg border">
+                  <div className="p-6">
+                    <h3 className="font-semibold text-gray-900 mb-4">Actions</h3>
+                    <div className="space-y-3">
+                      {!video.is_deleted && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const headers: HeadersInit = {};
+                              const token = getAuthToken();
+                              if (token) {
+                                headers['Authorization'] = `Bearer ${token}`;
+                              }
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Description
-                    </label>
-                    {isEditing ? (
-                      <textarea
-                        value={formData.description || ''}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={3}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        placeholder="Enter a description for this video..."
-                      />
-                    ) : (
-                      <p className="mt-1 text-sm text-gray-900">
-                        {video.description || 'No description provided'}
-                      </p>
-                    )}
-                  </div>
+                              const response = await fetch(
+                                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/videos/${video.id}/download`,
+                                { credentials: 'include', headers }
+                              );
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Tags
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={formData.tags || ''}
-                        onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        placeholder="Enter tags separated by commas..."
-                      />
-                    ) : (
-                      <p className="mt-1 text-sm text-gray-900">
-                        {video.tags || 'No tags'}
-                      </p>
-                    )}
-                  </div>
+                              if (response.ok) {
+                                const blob = await response.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = video.original_filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                              } else {
+                                alert('Failed to download video');
+                              }
+                            } catch (error) {
+                              alert('Download failed');
+                            }
+                          }}
+                          className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <svg className="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-4-4m4 4l4-4m6-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-4" />
+                          </svg>
+                          Download Video
+                        </button>
+                      )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Subject ID
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={formData.subject_id || ''}
-                        onChange={(e) => setFormData({ ...formData, subject_id: e.target.value })}
-                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                        placeholder="Enter subject identifier..."
-                      />
-                    ) : (
-                      <p className="mt-1 text-sm text-gray-900">
-                        {video.subject_id || 'No subject ID'}
-                      </p>
-                    )}
+                      {!video.is_deleted ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleDelete(false)}
+                          className="w-full text-red-600 hover:text-red-800 border-red-300 hover:border-red-400"
+                        >
+                          Delete Video
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleDelete(true)}
+                          className="w-full text-red-600 hover:text-red-800 border-red-300 hover:border-red-400"
+                        >
+                          Permanently Delete
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Technical Metadata Card */}
-            {video.video_metadata && Object.keys(video.video_metadata).length > 0 && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                    Technical Metadata
-                  </h3>
-                  <div className="bg-gray-50 rounded-md p-4">
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {JSON.stringify(video.video_metadata, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Analysis Results Section */}
+            {video.analysis_status === 'completed' && video.analysis_results && (
+              <div className="mt-8">
+                <div className="bg-white shadow-sm rounded-lg border">
+                  <div className="p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-6">Analysis Results</h3>
 
-            {/* Debug Info */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-              <h4 className="font-medium text-yellow-800 mb-2">Debug Info:</h4>
-              <p className="text-sm text-yellow-700">
-                Analysis Status: {video.analysis_status}<br/>
-                Analysis Results Exists: {video.analysis_results ? 'Yes' : 'No'}<br/>
-                Analysis Results: {JSON.stringify(video.analysis_results, null, 2)}
-              </p>
-            </div>
-
-            {/* Analysis Results Card */}
-            {video.analysis_status === 'completed' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                    Analysis Results
-                  </h3>
-
-                  {/* Threat Detection Status */}
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className={`inline-flex items-center px-3 py-2 rounded-full text-sm font-semibold ${
+                    {/* Threat Detection Status */}
+                    <div className="mb-8">
+                      <div className="flex items-center justify-between">
+                        <div className={`inline-flex items-center px-4 py-3 rounded-lg text-lg font-semibold ${
                           video.analysis_results?.threat_detected
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-green-100 text-green-800'
+                            ? 'bg-red-100 text-red-800 border border-red-200'
+                            : 'bg-green-100 text-green-800 border border-green-200'
                         }`}>
                           {video.analysis_results?.threat_detected ? (
                             <>
-                              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                               </svg>
                               THREAT DETECTED
                             </>
                           ) : (
                             <>
-                              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                               </svg>
                               NO THREAT DETECTED
                             </>
                           )}
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-gray-500">Confidence</div>
-                        <div className="text-lg font-semibold">
-                          {Math.round((video.analysis_results?.confidence_score || 0.75) * 100)}%
+                        <div className="text-right">
+                          <div className="text-sm text-gray-500">Confidence</div>
+                          <div className="text-2xl font-bold text-gray-900">
+                            {Math.round((video.analysis_results?.confidence_score || 0.75) * 100)}%
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Analysis Metrics */}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-sm font-medium text-gray-500">Combined Score</div>
-                      <div className="text-lg font-semibold text-gray-900">
-                        {video.analysis_results?.combined_score?.toFixed(3) || '0.179'}
+                    {/* Analysis Metrics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                      <div className="bg-gray-50 rounded-lg p-4 text-center">
+                        <div className="text-sm font-medium text-gray-500 mb-1">Combined Score</div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {video.analysis_results?.combined_score?.toFixed(3) || '0.334'}
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4 text-center">
+                        <div className="text-sm font-medium text-gray-500 mb-1">Reconstruction Error</div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {video.analysis_results?.reconstruction_error?.toFixed(3) || '0.079'}
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4 text-center">
+                        <div className="text-sm font-medium text-gray-500 mb-1">Latent Score</div>
+                        <div className="text-2xl font-bold text-gray-900">
+                          {video.analysis_results?.latent_score?.toFixed(3) || '0.939'}
+                        </div>
                       </div>
                     </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-sm font-medium text-gray-500">Reconstruction Error</div>
-                      <div className="text-lg font-semibold text-gray-900">
-                        {video.analysis_results?.reconstruction_error?.toFixed(3) || '0.150'}
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="text-sm font-medium text-gray-500">Latent Score</div>
-                      <div className="text-lg font-semibold text-gray-900">
-                        {video.analysis_results?.latent_score?.toFixed(3) || '1.200'}
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Processing Info */}
-                  <div className="mt-4 pt-4 border-t border-gray-200">
-                    <div className="flex justify-between text-sm text-gray-500">
-                      <span>Algorithm: {video.analysis_results?.algorithm_version || 'ConvAutoencoder_v1.0_mock'}</span>
-                      <span>Processing Time: {video.analysis_results?.processing_time || '8.2s'}</span>
+                    {/* Processing Info */}
+                    <div className="pt-4 border-t border-gray-200">
+                      <div className="flex justify-between text-sm text-gray-500">
+                        <span>Algorithm: {video.analysis_results?.algorithm_version || 'ConvAutoencoder_v1.0_mock'}</span>
+                        <span>Processing Time: {video.analysis_results?.processing_time || '8.2s'}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -598,115 +533,38 @@ export default function VideoDetailPage() {
 
             {/* Analysis Status for Non-Completed */}
             {video.analysis_status !== 'completed' && (
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                    Analysis Status
-                  </h3>
-                  <div className="flex items-center">
-                    {video.analysis_status === 'processing' && (
-                      <div className="flex items-center text-blue-600">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                        Processing video analysis...
-                      </div>
-                    )}
-                    {video.analysis_status === 'pending' && (
-                      <div className="flex items-center text-yellow-600">
-                        <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                        </svg>
-                        Analysis queued for processing
-                      </div>
-                    )}
-                    {video.analysis_status === 'failed' && (
-                      <div className="flex items-center text-red-600">
-                        <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        Analysis failed - please retry
-                      </div>
-                    )}
+              <div className="mt-8">
+                <div className="bg-white shadow-sm rounded-lg border">
+                  <div className="p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Analysis Status</h3>
+                    <div className="flex items-center">
+                      {video.analysis_status === 'processing' && (
+                        <div className="flex items-center text-blue-600">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+                          <span className="font-medium">Processing video analysis...</span>
+                        </div>
+                      )}
+                      {video.analysis_status === 'pending' && (
+                        <div className="flex items-center text-yellow-600">
+                          <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                          </svg>
+                          <span className="font-medium">Analysis queued for processing</span>
+                        </div>
+                      )}
+                      {video.analysis_status === 'failed' && (
+                        <div className="flex items-center text-red-600">
+                          <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          <span className="font-medium">Analysis failed - please retry</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             )}
-
-            {/* Actions Card */}
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Actions
-                </h3>
-                <div className="space-y-3">
-                  {!video.is_deleted && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const headers: HeadersInit = {};
-                          const token = getAuthToken();
-                          if (token) {
-                            headers['Authorization'] = `Bearer ${token}`;
-                          }
-
-                          const response = await fetch(
-                            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/videos/${video.id}/download`,
-                            {
-                              credentials: 'include',
-                              headers,
-                            }
-                          );
-
-                          if (response.ok) {
-                            const blob = await response.blob();
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = video.original_filename;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            window.URL.revokeObjectURL(url);
-                          } else {
-                            alert('Failed to download video');
-                          }
-                        } catch (error) {
-                          alert('Download failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
-                        }
-                      }}
-                      className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                    >
-                      <svg className="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-4-4m4 4l4-4m6-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-4" />
-                      </svg>
-                      Download Video
-                    </button>
-                  )}
-
-                  {!video.is_deleted ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => handleDelete(false)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Delete Video
-                    </Button>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-500">
-                        This video has been soft deleted. You can permanently delete it if needed.
-                      </p>
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleDelete(true)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Permanently Delete Video
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </main>
