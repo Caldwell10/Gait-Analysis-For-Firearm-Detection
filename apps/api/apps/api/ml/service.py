@@ -9,6 +9,7 @@ from datetime import datetime
 from .model import ConvAutoencoder
 from .processor import gei_from_video
 from .utils import load_yaml, device_auto, save_json
+from ...core.config import settings
 
 
 class MLInferenceService:
@@ -92,8 +93,8 @@ class MLInferenceService:
                 gei_from_video,
                 video_path,
                 target_size=self.config['data']['image_size'],
-                clahe_clip=processing_config.get('clahe_clip', 2.5),
-                clahe_grid=processing_config.get('clahe_grid', 8)
+                clahe_clip=processing_config.get('clahe_clip', settings.ml_clahe_clip),
+                clahe_grid=processing_config.get('clahe_grid', settings.ml_clahe_grid)
             )
 
             # Step 2: Prepare GEI for model inference
@@ -116,7 +117,7 @@ class MLInferenceService:
                 combined_score = 0.5 * recon_error + 0.5 * (latent_norm / 10.0)  # Normalize latent
 
             # Step 4: Threat detection using optimal threshold
-            optimal_threshold = self.config.get('eval', {}).get('optimal_threshold', 0.179)
+            optimal_threshold = self.config.get('eval', {}).get('optimal_threshold', settings.ml_model_threshold)
             threat_detected = combined_score >= optimal_threshold
 
             # Step 5: Calculate confidence scores

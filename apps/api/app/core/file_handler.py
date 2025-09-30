@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, Tuple
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 import magic
+from .config import settings
 
 # File validation settings
 ALLOWED_VIDEO_TYPES = {
@@ -18,10 +19,10 @@ ALLOWED_VIDEO_TYPES = {
 }
 
 ALLOWED_EXTENSIONS = [".mp4", ".avi", ".mov"]
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+MAX_FILE_SIZE = settings.max_file_size_mb * 1024 * 1024  # Convert MB to bytes
 
 # Base upload directory
-UPLOAD_BASE_DIR = Path("uploads")
+UPLOAD_BASE_DIR = Path(settings.upload_base_dir)
 
 
 class FileValidationError(Exception):
@@ -91,7 +92,7 @@ def get_file_size_mb(file: UploadFile) -> Tuple[int, str]:
     if size_bytes > MAX_FILE_SIZE:
         raise FileValidationError(
             f"File too large ({size_bytes / 1024 / 1024:.1f}MB). "
-            f"Maximum allowed: {MAX_FILE_SIZE / 1024 / 1024}MB"
+            f"Maximum allowed: {settings.max_file_size_mb}MB"
         )
 
     # Convert to human readable

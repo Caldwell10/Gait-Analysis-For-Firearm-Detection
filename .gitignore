@@ -200,9 +200,39 @@ test_*.sqlite
 tests/temp/
 tests/uploads/
 
-# Additional security
-apps/api/.env.*
+# Environment configuration security
+apps/api/.env*
 !apps/api/.env.example
+apps/pwa/.env*
+!apps/pwa/.env.example
 
+# Production configuration files
+config.prod.yaml
+config.production.yaml
+secrets.yaml
+credentials.json
+
+# Database configuration files
+database.conf
+db_config.ini
+
+# Temporary project files
 cookies.txt
 SPRINT3_ISSUES.md
+
+# Configuration Management (Sprint 3 hardcoded values cleanup)
+# Allow .env.example files but protect actual .env files
+*.env
+*.env.local
+*.env.development
+*.env.production
+*.env.staging
+!*.env.example
+
+# ML Model configuration backups
+apps/api/ml/config.*.yaml
+apps/api/ml/settings.*.json
+
+# Runtime configuration overrides
+config_override.*
+settings_override.*
