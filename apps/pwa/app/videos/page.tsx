@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { api, ApiError } from '../../src/lib/api'
+import { api, ApiError, MAX_FILE_SIZE_MB } from '../../src/lib/api'
 
 export default function VideosPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -21,9 +21,9 @@ export default function VideosPage() {
         return
       }
 
-      // Validate file size (100MB max)
-      if (selectedFile.size > 100 * 1024 * 1024) {
-        setMessage('File size must be less than 100MB')
+      // Validate file size (configurable max)
+      if (selectedFile.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        setMessage(`File size must be less than ${MAX_FILE_SIZE_MB}MB`)
         return
       }
 
@@ -85,7 +85,7 @@ export default function VideosPage() {
               disabled={uploading}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Supported formats: MP4, AVI, MOV (max 100MB)
+              Supported formats: MP4, AVI, MOV (max {MAX_FILE_SIZE_MB}MB)
             </p>
           </div>
 
