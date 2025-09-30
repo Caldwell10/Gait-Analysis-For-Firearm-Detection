@@ -115,6 +115,7 @@ export interface VideoMetadata {
   tags?: string;
   subject_id?: string;
   analysis_status: string;
+  analysis_results?: Record<string, any>;
   video_metadata?: Record<string, any>;
   is_deleted: boolean;
   uploaded_by: string;
@@ -174,14 +175,12 @@ export const api = {
   },
 
   async logout(): Promise<void> {
-    const response = await apiRequest('/auth/logout', {
+    await apiRequest('/auth/logout', {
       method: 'POST',
     });
 
     // Clear the stored token
     setAuthToken(null);
-
-    return response;
   },
 
   async forgotPassword(data: ForgotPasswordData): Promise<void> {
