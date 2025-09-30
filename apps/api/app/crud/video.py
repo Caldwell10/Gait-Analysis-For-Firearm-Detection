@@ -14,7 +14,8 @@ def create_video_record(
     file_path: str,
     file_size: str,
     uploaded_by: uuid.UUID,
-    video_metadata: Optional[Dict[str, Any]] = None
+    video_metadata: Optional[Dict[str, Any]] = None,
+    video_id: Optional[uuid.UUID] = None
 ) -> VideoRecord:
     """
     Create a new video record in the database
@@ -32,6 +33,7 @@ def create_video_record(
         Created VideoRecord instance
     """
     video_record = VideoRecord(
+        id=video_id,
         filename=filename,
         original_filename=original_filename,
         file_path=file_path,
@@ -395,3 +397,37 @@ def get_videos_for_analysis(db: Session, limit: int = 10) -> List[VideoRecord]:
     return db.query(VideoRecord).filter(
         VideoRecord.analysis_status == "pending"
     ).order_by(VideoRecord.created_at).limit(limit).all()
+
+
+def update_video_ml_data(
+    db: Session,
+    video_id: uuid.UUID,
+    gei_file_path: Optional[str] = None,
+    processing_metadata: Optional[Dict[str, Any]] = None
+) -> Optional[VideoRecord]:
+    """
+    Update video record with ML processing data
+
+    Args:
+        db: Database session
+        video_id: UUID of the video
+        gei_file_path: Path to generated GEI image
+        processing_metadata: ML processing metadata
+
+    Returns:
+        Updated VideoRecord if found, None otherwise
+    """
+    video = db.query(VideoRecord).filter(VideoRecord.id == video_id).first()
+
+    if not video:
+        return None
+
+    if gei_file_path is not None:
+        video.gei_file_path = gei_file_path
+
+    if processing_metadata is not None:
+        video.processing_metadata = processing_metadata
+
+    db.commit()
+    db.refresh(video)
+    return video

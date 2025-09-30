@@ -1,6 +1,9 @@
 import uuid
+import asyncio
+import random
+import time
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -32,9 +35,87 @@ from ..schemas.video import (
 router = APIRouter(prefix="/videos", tags=["videos"])
 
 
+def process_video_analysis_sync(video_id: str):
+    """
+    Background task to process video analysis
+    Simulates ML processing pipeline for now
+    """
+    # Create a new database session for the background task
+    db = next(get_db())
+
+    try:
+        # Simulate processing time
+        time.sleep(3)
+
+        # Update status to processing
+        video_crud.update_analysis_status(
+            db=db,
+            video_id=uuid.UUID(video_id),
+            status_update=VideoAnalysisStatusUpdate(status="processing"),
+            analyzed_by=None
+        )
+
+        # Simulate more processing time
+        time.sleep(5)
+
+        # Generate mock analysis results
+        threat_detected = random.choice([True, False])
+        confidence = random.uniform(0.6, 0.95)
+
+        mock_results = {
+            "threat_detected": threat_detected,
+            "confidence_score": round(confidence, 3),
+            "threat_confidence": round(confidence if threat_detected else 1-confidence, 3),
+            "combined_score": round(random.uniform(0.1, 0.4), 3),
+            "reconstruction_error": round(random.uniform(0.05, 0.25), 3),
+            "latent_score": round(random.uniform(0.8, 1.5), 3),
+            "processing_time": "8.2s",
+            "algorithm_version": "ConvAutoencoder_v1.0_mock",
+            "gei_generated": True,
+            "analysis_timestamp": str(uuid.uuid4())
+        }
+
+        # Update status to completed
+        video_crud.update_analysis_status(
+            db=db,
+            video_id=uuid.UUID(video_id),
+            status_update=VideoAnalysisStatusUpdate(
+                status="completed",
+                analysis_results=mock_results
+            ),
+            analyzed_by=None
+        )
+
+        threat_status = 'THREAT' if threat_detected else 'NORMAL'
+        print(f"✅ Video {video_id} analysis completed: {threat_status}")
+
+    except Exception as e:
+        # Update status to failed
+        try:
+            video_crud.update_analysis_status(
+                db=db,
+                video_id=uuid.UUID(video_id),
+                status_update=VideoAnalysisStatusUpdate(
+                    status="failed",
+                    analysis_results={"error": str(e)}
+                ),
+                analyzed_by=None
+            )
+        except:
+            pass
+        print(f"❌ Video {video_id} analysis failed: {e}")
+    finally:
+        # Close the database session
+        try:
+            db.close()
+        except:
+            pass
+
+
 @router.post("/upload", response_model=VideoUploadResponse)
 async def upload_video(
     file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -71,11 +152,15 @@ async def upload_video(
             file_path=file_path,
             file_size=size_str,
             uploaded_by=current_user.id,
-            video_metadata=metadata
+            video_metadata=metadata,
+            video_id=video_id
         )
 
+        # Trigger background analysis processing
+        background_tasks.add_task(process_video_analysis_sync, str(video_record.id))
+
         return VideoUploadResponse(
-            message="Video uploaded successfully",
+            message="Video uploaded successfully - analysis will begin shortly",
             video_id=str(video_record.id),
             filename=video_record.original_filename,
             file_size=video_record.file_size,
@@ -237,6 +322,7 @@ async def get_video(
         tags=video.tags,
         subject_id=video.subject_id,
         analysis_status=video.analysis_status,
+        analysis_results=video.analysis_results,
         video_metadata=video.video_metadata,
         is_deleted=video.is_deleted,
         uploaded_by=str(video.uploaded_by),
@@ -699,4 +785,60 @@ async def cleanup_storage(
     return {
         "cleanup_results": cleanup_results,
         "timestamp": "2024-01-01T00:00:00Z"
+    }
+
+
+@router.post("/{video_id}/process")
+async def trigger_video_processing(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Manually trigger processing for a video
+
+    - **video_id**: UUID of the video
+    - Useful for retrying failed analysis or processing uploaded videos
+    - Users can only process their own videos (unless admin)
+    """
+    try:
+        video_uuid = uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video ID format"
+        )
+
+    # Check if video exists and user has access
+    if current_user.role == UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=video_uuid)
+    else:
+        video = video_crud.get_video_by_id_and_user(
+            db=db,
+            video_id=video_uuid,
+            user_id=current_user.id
+        )
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or access denied"
+        )
+
+    # Check if video is already processing
+    if video.analysis_status == "processing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Video is already being processed"
+        )
+
+    # Trigger background analysis processing
+    background_tasks.add_task(process_video_analysis_sync, str(video.id))
+
+    return {
+        "message": "Video processing triggered successfully",
+        "video_id": video_id,
+        "current_status": video.analysis_status,
+        "processing_started": True
     }

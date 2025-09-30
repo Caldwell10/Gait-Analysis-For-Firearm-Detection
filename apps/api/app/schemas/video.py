@@ -24,6 +24,7 @@ class VideoMetadataResponse(BaseModel):
     tags: Optional[str] = None
     subject_id: Optional[str] = None
     analysis_status: str
+    analysis_results: Optional[Dict[str, Any]] = None
     video_metadata: Optional[Dict[str, Any]] = None
     is_deleted: bool = False
     uploaded_by: str

@@ -63,7 +63,11 @@ class VideoRecord(Base):
     
     # Video metadata (JSON field for flexibility)
     video_metadata = Column(JSON, nullable=True)  # resolution, fps, format, etc.
-    
+
+    # ML Processing fields
+    gei_file_path = Column(Text, nullable=True)  # Path to generated GEI image
+    processing_metadata = Column(JSON, nullable=True)  # ML processing details
+
     # Analysis status
     analysis_status = Column(String(50), default="pending", nullable=False)  # pending, processing, completed, failed
     analysis_results = Column(JSON, nullable=True)  # Gait analysis results
@@ -89,15 +93,22 @@ class GaitAnalysis(Base):
     # Analysis results (JSON for flexibility)
     analysis_data = Column(JSON, nullable=False)  # Detailed gait metrics
     confidence_score = Column(String(10), nullable=True)  # e.g., "0.85" or "85%"
-    
+
+    # ML-specific scores
+    reconstruction_error = Column(String(20), nullable=True)  # Autoencoder reconstruction loss
+    latent_score = Column(String(20), nullable=True)  # Mahalanobis distance in latent space
+    combined_score = Column(String(20), nullable=True)  # 0.5 * recon + 0.5 * latent
+
     # Detection results
     threat_detected = Column(Boolean, default=False, nullable=False)
     threat_confidence = Column(String(10), nullable=True)
     threat_details = Column(JSON, nullable=True)  # Specific threat indicators
-    
+
     # Processing info
-    algorithm_version = Column(String(20), nullable=True)
+    algorithm_version = Column(String(50), nullable=True)
     processing_time = Column(String(20), nullable=True)  # e.g., "2.5s"
+    processing_started_at = Column(DateTime(timezone=True), nullable=True)
+    processing_completed_at = Column(DateTime(timezone=True), nullable=True)
     
     # User and timestamps
     analyzed_by = Column(UUID(as_uuid=True), nullable=False, index=True)

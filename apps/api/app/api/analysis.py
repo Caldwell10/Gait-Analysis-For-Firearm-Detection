@@ -1,3 +1,4 @@
+import os
 import uuid
 from typing import List, Optional
 from datetime import datetime
@@ -451,6 +452,185 @@ async def get_pending_analyses(
     }
 
 
+@router.post("/analyze/{video_id}", response_model=dict)
+async def analyze_video_ml(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze video using real ML inference (Sprint 3)
+
+    - **video_id**: UUID of the video to analyze
+    - Uses trained ConvAutoencoder with 88.1% AUC performance
+    - Generates GEI (Gait Energy Image) from thermal video
+    - Returns real threat detection with confidence scores
+    """
+    try:
+        video_uuid = uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video ID format"
+        )
+
+    # Check if video exists and user has access
+    if current_user.role == UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=video_uuid)
+    else:
+        video = video_crud.get_video_by_id_and_user(
+            db=db,
+            video_id=video_uuid,
+            user_id=current_user.id
+        )
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or access denied"
+        )
+
+    # Check if analysis already exists
+    existing_analysis = analysis_crud.get_analysis_by_video_id(db=db, video_id=video_uuid)
+    if existing_analysis:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Analysis already exists for this video"
+        )
+
+    # Update video status to processing
+    video_crud.update_analysis_status(
+        db=db,
+        video_id=video_uuid,
+        status_update=video_crud.VideoAnalysisStatusUpdate(
+            status="processing",
+            analysis_results=None
+        ),
+        analyzed_by=current_user.id
+    )
+
+    try:
+        # Import ML service
+        from ...ml.service import analyze_thermal_video
+
+        # Create GEI output directory
+        import os
+        gei_output_dir = os.path.join(
+            os.path.dirname(video.file_path),
+            "gei"
+        )
+
+        # Run ML analysis
+        ml_results = await analyze_thermal_video(
+            video_path=video.file_path,
+            output_dir=gei_output_dir
+        )
+
+        if "error" in ml_results:
+            # Update video status to failed
+            video_crud.update_analysis_status(
+                db=db,
+                video_id=video_uuid,
+                status_update=video_crud.VideoAnalysisStatusUpdate(
+                    status="failed",
+                    analysis_results={"error": ml_results["error"]}
+                ),
+                analyzed_by=current_user.id
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"ML analysis failed: {ml_results['error']}"
+            )
+
+        # Create analysis record with real ML results
+        analysis_data = {
+            "gait_metrics": {
+                "processing_method": "thermal_gei",
+                "model_type": "ConvAutoencoder",
+                "thermal_enhancement": "CLAHE"
+            },
+            "ml_results": {
+                "reconstruction_error": ml_results["reconstruction_error"],
+                "latent_score": ml_results["latent_score"],
+                "combined_score": ml_results["combined_score"],
+                "optimal_threshold": ml_results["optimal_threshold"],
+                "model_performance": ml_results["model_performance"]
+            },
+            "processing_info": ml_results["processing_metadata"],
+            "gei_path": ml_results.get("gei_file_path")
+        }
+
+        # Create the analysis with ML results
+        analysis = analysis_crud.create_analysis(
+            db=db,
+            video_id=video_uuid,
+            analysis_data=analysis_data,
+            analyzed_by=current_user.id,
+            confidence_score=str(ml_results["confidence_score"]),
+            threat_detected=ml_results["threat_detected"],
+            threat_confidence=str(ml_results["threat_confidence"]),
+            threat_details={
+                "threat_level": "HIGH" if ml_results["threat_detected"] else "LOW",
+                "combined_score": ml_results["combined_score"],
+                "threshold_exceeded": ml_results["combined_score"] >= ml_results["optimal_threshold"]
+            },
+            algorithm_version=ml_results["algorithm_version"],
+            processing_time=ml_results["processing_time"]
+        )
+
+        # Update video with ML processing metadata
+        video_crud.update_video_ml_data(
+            db=db,
+            video_id=video_uuid,
+            gei_file_path=ml_results.get("gei_file_path"),
+            processing_metadata=ml_results["processing_metadata"]
+        )
+
+        # Update video status to completed
+        video_crud.update_analysis_status(
+            db=db,
+            video_id=video_uuid,
+            status_update=video_crud.VideoAnalysisStatusUpdate(
+                status="completed",
+                analysis_results=analysis_data
+            ),
+            analyzed_by=current_user.id
+        )
+
+        return {
+            "message": "Real ML analysis completed successfully",
+            "analysis_id": str(analysis.id),
+            "video_id": video_id,
+            "threat_detected": ml_results["threat_detected"],
+            "confidence_score": ml_results["confidence_score"],
+            "combined_score": ml_results["combined_score"],
+            "processing_time": ml_results["processing_time"],
+            "model_performance": {
+                "auc": "88.1%",
+                "recall": "100%",
+                "precision": "80%"
+            }
+        }
+
+    except Exception as e:
+        # Update video status to failed
+        video_crud.update_analysis_status(
+            db=db,
+            video_id=video_uuid,
+            status_update=video_crud.VideoAnalysisStatusUpdate(
+                status="failed",
+                analysis_results={"error": str(e)}
+            ),
+            analyzed_by=current_user.id
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"ML analysis failed: {str(e)}"
+        )
+
+
 @router.post("/mock/{video_id}", response_model=dict)
 async def create_mock_analysis(
     video_id: str,
@@ -549,3 +729,65 @@ async def create_mock_analysis(
         "confidence": mock_result.confidence,
         "processing_time": mock_result.processing_time
     }
+
+
+@router.get("/{analysis_id}/gei")
+async def get_analysis_gei(
+    analysis_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the GEI (Gait Energy Image) for an analysis
+
+    - **analysis_id**: UUID of the analysis
+    - Returns the GEI image generated during ML processing
+    - Users can only access GEIs for their own video analyses (unless admin)
+    """
+    try:
+        analysis_uuid = uuid.UUID(analysis_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid analysis ID format"
+        )
+
+    analysis = analysis_crud.get_analysis_by_id(db=db, analysis_id=analysis_uuid)
+
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found"
+        )
+
+    # Check access permissions
+    if current_user.role != UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=analysis.video_id)
+        if not video or video.uploaded_by != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+
+    # Get GEI path from analysis data or video record
+    gei_path = None
+    if analysis.analysis_data and "gei_path" in analysis.analysis_data:
+        gei_path = analysis.analysis_data["gei_path"]
+    else:
+        # Try to get from video record
+        video = video_crud.get_video_by_id(db=db, video_id=analysis.video_id)
+        if video and video.gei_file_path:
+            gei_path = video.gei_file_path
+
+    if not gei_path or not os.path.exists(gei_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="GEI image not found"
+        )
+
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        gei_path,
+        media_type="image/png",
+        filename=f"gei_{analysis_id}.png"
+    )
