@@ -176,6 +176,13 @@ apps/api/ml/outputs/
 *_converted.*
 /tmp/test_h264.mp4
 
+# ML Generated Artifacts (Sprint 3)
+apps/api/uploads/videos/**/gei/
+*.gei.png
+*.gei.jpg
+apps/api/ml/outputs/
+ml_processing_*.log
+
 # Additional log patterns
 
 apps/api/processing.log
