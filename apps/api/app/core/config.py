@@ -35,12 +35,7 @@ class Settings(BaseSettings):
     video_upload_dir: str = "./uploads/videos"  # Backward compatibility
     max_video_size_mb: int = 500  # Backward compatibility
 
-    # ML Model Configuration
-    ml_model_threshold: float = float(os.getenv("ML_MODEL_THRESHOLD", "0.179"))
-    ml_confidence_default: float = float(os.getenv("ML_CONFIDENCE_DEFAULT", "0.75"))
-    ml_clahe_clip: float = float(os.getenv("ML_CLAHE_CLIP", "2.5"))
-    ml_clahe_grid: int = int(os.getenv("ML_CLAHE_GRID", "8"))
-    ml_model_auc: float = float(os.getenv("ML_MODEL_AUC", "88.1"))
+    # ML Configuration will be added when needed for model training
 
     # Processing Configuration
     default_page_size: int = int(os.getenv("DEFAULT_PAGE_SIZE", "20"))

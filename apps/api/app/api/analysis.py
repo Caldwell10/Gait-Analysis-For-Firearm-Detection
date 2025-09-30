@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
+from ..core.config import settings
 from .auth import get_current_user
 from ..crud import analysis as analysis_crud
 from ..crud import video as video_crud
@@ -419,7 +420,7 @@ async def get_analysis_stats(
         completed_analyses=stats["total_analyses"],
         failed_analyses=0,  # TODO: Implement failed count
         threats_detected=stats["threats_detected"],
-        average_processing_time="2.3s",  # TODO: Calculate actual average
+        average_processing_time="2.3s",  # Will be calculated from actual data
         last_analysis_date=stats["last_analysis_date"]
     )
 
@@ -607,9 +608,9 @@ async def analyze_video_ml(
             "combined_score": ml_results["combined_score"],
             "processing_time": ml_results["processing_time"],
             "model_performance": {
-                "auc": "88.1%",
-                "recall": "100%",
-                "precision": "80%"
+                "auc": "TBD",
+                "recall": "TBD",
+                "precision": "TBD"
             }
         }
 
