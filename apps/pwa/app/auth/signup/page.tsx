@@ -10,6 +10,7 @@ import TextField from '../../../src/components/ui/TextField';
 import PasswordField from '../../../src/components/ui/PasswordField';
 import Button from '../../../src/components/ui/Button';
 import FormError from '../../../src/components/ui/FormError';
+import OAuthButtons from '../../../src/components/ui/OAuthButtons';
 import { api, ApiError } from '../../../src/lib/api';
 
 const signupSchema = z.object({
@@ -59,6 +60,11 @@ export default function SignupPage() {
     }
   };
 
+  const handleOAuthLogin = (provider: 'google' | 'github') => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    window.location.href = `${apiUrl}/auth/oauth/${provider}/login`;
+  };
+
   return (
     <AuthLayout title="Create your account" description="Get started with thermal gait screening">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-7 body-font">
@@ -95,6 +101,19 @@ export default function SignupPage() {
         <Button type="submit" className="w-full" loading={loading} disabled={loading}>
           {loading ? 'Creating account…' : 'Create account'}
         </Button>
+
+        <div className="relative py-2">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10" />
+          </div>
+          <div className="relative flex justify-center">
+            <span className="rounded-full border border-white/10 bg-[var(--tg-color-bg)] px-4 py-1 text-xs uppercase tracking-[0.35em] text-slate-400 heading-font">
+              Or continue with
+            </span>
+          </div>
+        </div>
+
+        <OAuthButtons loading={loading} onSelect={handleOAuthLogin} />
 
         <p className="text-center text-sm text-slate-400">
           Already have an account?{' '}
