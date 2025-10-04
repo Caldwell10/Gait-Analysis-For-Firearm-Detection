@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../src/components/ui/Button';
 import { api, VideoListResponse } from '../../src/lib/api';
 import { useSession } from '../../src/lib/session';
+import AnalysisProgress from '../../src/components/ui/AnalysisProgress';
 
 type VideoItem = VideoListResponse['videos'][number];
 
@@ -86,23 +87,25 @@ export default function DashboardPage(): JSX.Element {
   const router = useRouter();
   const { user, clearSession } = useSession();
 
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const data = await api.getVideos({ page: 1, per_page: 20 });
+      setVideosData(data);
+    } catch (error) {
+      console.error('Failed to load dashboard data', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!user) return;
 
-    async function load() {
-      try {
-        setStatsLoading(true);
-        const data = await api.getVideos({ page: 1, per_page: 20 });
-        setVideosData(data);
-      } catch (error) {
-        console.error('Failed to load dashboard data', error);
-      } finally {
-        setStatsLoading(false);
-      }
-    }
-
-    load();
-  }, [user]);
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 6000);
+    return () => clearInterval(interval);
+  }, [user, fetchDashboardData]);
 
   const stats = useMemo(() => {
     const counts: Record<StatusKey, number> = {
@@ -349,23 +352,26 @@ export default function DashboardPage(): JSX.Element {
                 {recentVideos.map(video => (
                   <div
                     key={video.id}
-                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4"
                   >
-                    <div>
-                      <h3 className="text-sm font-semibold text-white heading-font">{video.original_filename}</h3>
-                      <p className="text-xs text-slate-300 body-font">
-                        {video.file_size} · {video.created_label}
-                      </p>
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                      <div>
+                        <h3 className="text-sm font-semibold text-white heading-font">{video.original_filename}</h3>
+                        <p className="text-xs text-slate-300 body-font">
+                          {video.file_size} · {video.created_label}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <StatusBadge status={video.analysis_status as StatusKey} />
+                        <button
+                          onClick={() => router.push(`/videos/detail?id=${video.id}`)}
+                          className="rounded-full border border-white/20 px-4 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                        >
+                          Open
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <StatusBadge status={video.analysis_status as StatusKey} />
-                      <button
-                        onClick={() => router.push(`/videos/detail?id=${video.id}`)}
-                        className="rounded-full border border-white/20 px-4 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
-                      >
-                        Open
-                      </button>
-                    </div>
+                    <AnalysisProgress status={video.analysis_status as StatusKey} size="sm" />
                   </div>
                 ))}
               </div>
