@@ -1,1 +1,0 @@
-# FastAPI Thermal Gait Surveillance API
