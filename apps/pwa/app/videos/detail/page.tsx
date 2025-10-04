@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Button from '../../../src/components/ui/Button';
 import AnalysisProgress from '../../../src/components/ui/AnalysisProgress';
-import { api, ApiError, VideoMetadata, VideoUpdateRequest, getAuthToken } from '../../../src/lib/api';
+import { api, ApiError, VideoMetadata, VideoUpdateRequest } from '../../../src/lib/api';
 import { useSession } from '../../../src/lib/session';
 
 type StatusKey = 'pending' | 'processing' | 'completed' | 'failed';
@@ -25,6 +25,61 @@ const STATUS_BADGE: Record<StatusKey, string> = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+type MetricBarConfig = {
+  label: string;
+  value: number;
+  max: number;
+  threshold: number;
+};
+
+const MetricBar = ({ label, value, max, threshold }: MetricBarConfig) => {
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const safeMax = max > 0 ? max : 1;
+  const percent = Math.min(100, (safeValue / safeMax) * 100);
+  const thresholdPercent = Math.min(100, (threshold / safeMax) * 100);
+  const isAbove = Number.isFinite(value) && safeValue >= threshold;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs text-slate-300 heading-font">
+        <span>{label}</span>
+        <span className={isAbove ? 'text-rose-300' : 'text-slate-200'}>
+          {Number.isFinite(value) ? value.toFixed(3) : '—'}
+        </span>
+      </div>
+      <div className="relative h-2 rounded-full bg-white/10">
+        <div
+          className={`absolute inset-y-0 left-0 rounded-full transition-all ${
+            isAbove
+              ? 'bg-rose-500/80 shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+              : 'bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#0ea5e9] shadow-[0_0_12px_rgba(99,102,241,0.25)]'
+          }`}
+          style={{ width: `${percent}%` }}
+        />
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-white/40"
+          style={{ left: `${thresholdPercent}%` }}
+        />
+      </div>
+    </div>
+  );
+};
+
+function getConfidenceScore(video: VideoMetadata | null): number | null {
+  if (!video?.analysis_results) return null;
+
+  const raw =
+    video.analysis_results.confidence_score ??
+    video.analysis_results.threat_confidence ??
+    (video.analysis_results as Record<string, unknown>)['confidence'];
+
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'number') return raw;
+
+  const numeric = parseFloat(String(raw));
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 export default function VideoDetailPage(): JSX.Element {
   const [video, setVideo] = useState<VideoMetadata | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,9 +87,6 @@ export default function VideoDetailPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<VideoUpdateRequest>({});
-  const [videoError, setVideoError] = useState<string | null>(null);
-  const [videoLoading, setVideoLoading] = useState(true);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const { user } = useSession();
   const router = useRouter();
@@ -47,15 +99,11 @@ export default function VideoDetailPage(): JSX.Element {
     loadVideo();
   }, [user, videoId]);
 
-  useEffect(() => {
-    if (!video || videoUrl) return;
-    streamVideo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [video]);
-
-  useEffect(() => () => {
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-  }, [videoUrl]);
+  const streamSrc = useMemo(() => {
+    if (!videoId) return null;
+    const cacheBust = video?.updated_at ? new Date(video.updated_at).getTime() : Date.now();
+    return `${API_BASE_URL}/api/videos/${videoId}/stream?b=${cacheBust}`;
+  }, [videoId, video?.updated_at]);
 
   const threatMetrics = useMemo(() => {
     if (!video?.analysis_results) return null;
@@ -83,6 +131,22 @@ export default function VideoDetailPage(): JSX.Element {
     ];
   }, [video]);
 
+  const metricBars = useMemo(() => {
+    if (!video?.analysis_results) return [];
+    const combined = Number(video.analysis_results.combined_score ?? NaN);
+    const reconstruction = Number(video.analysis_results.reconstruction_error ?? NaN);
+    const latent = Number(video.analysis_results.latent_score ?? NaN);
+    const threshold = Number(video.analysis_results.threshold ?? 0.179);
+    const values = [combined, reconstruction, latent].filter(v => Number.isFinite(v)) as number[];
+    const maxValue = Math.max(threshold, ...(values.length ? values : [threshold]));
+
+    return [
+      { label: 'Combined score', value: combined, threshold, max: maxValue },
+      { label: 'Reconstruction error', value: reconstruction, threshold, max: maxValue },
+      { label: 'Latent distance', value: latent, threshold, max: maxValue },
+    ];
+  }, [video]);
+
   async function loadVideo() {
     try {
       setLoading(true);
@@ -99,33 +163,6 @@ export default function VideoDetailPage(): JSX.Element {
       setError(err instanceof ApiError ? err.message : 'Failed to load video');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function streamVideo() {
-    if (!videoId || !video) return;
-
-    try {
-      setVideoLoading(true);
-      setVideoError(null);
-
-      const headers: HeadersInit = { Accept: 'video/*' };
-      const token = getAuthToken();
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const response = await fetch(`${API_BASE_URL}/api/videos/${videoId}/stream`, {
-        credentials: 'include',
-        headers,
-      });
-      if (!response.ok) throw new Error(`Stream failed: ${response.status}`);
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      setVideoUrl(url);
-    } catch (err) {
-      setVideoError('Unable to load playback right now. Try refreshing the stream.');
-    } finally {
-      setVideoLoading(false);
     }
   }
 
@@ -161,6 +198,25 @@ export default function VideoDetailPage(): JSX.Element {
   function handleChange<K extends keyof VideoUpdateRequest>(key: K, value: VideoUpdateRequest[K]) {
     setFormData(prev => ({ ...prev, [key]: value }));
   }
+
+  const handleDownloadMetrics = () => {
+    if (!video?.analysis_results) return;
+
+    const payload = {
+      video_id: video.id,
+      filename: video.original_filename,
+      analysis: video.analysis_results,
+      generated_at: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${video.original_filename.replace(/\.[^/.]+$/, '')}-analysis.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (!user) {
     return (
@@ -236,24 +292,15 @@ export default function VideoDetailPage(): JSX.Element {
                 <AnalysisProgress status={video.analysis_status as StatusKey} size="sm" />
 
                 <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-                  {videoError ? (
-                    <div className="flex aspect-video flex-col items-center justify-center gap-4 text-sm text-slate-200">
-                      {videoError}
-                      <Button variant="secondary" size="sm" onClick={() => streamVideo()}>
-                        Retry stream
-                      </Button>
-                    </div>
-                  ) : videoLoading ? (
-                    <div className="flex aspect-video items-center justify-center">
-                      <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-violet-400" />
-                    </div>
-                  ) : videoUrl ? (
+                  {streamSrc ? (
                     <video
+                      key={streamSrc}
                       ref={videoRef}
                       className="aspect-video w-full"
-                      src={videoUrl}
+                      src={streamSrc}
                       controls
                       controlsList="nodownload"
+                      playsInline
                     />
                   ) : (
                     <div className="flex aspect-video items-center justify-center text-sm text-slate-300">
@@ -334,19 +381,67 @@ export default function VideoDetailPage(): JSX.Element {
                 <h2 className="text-lg font-semibold text-white heading-font">Analysis summary</h2>
                 {video.analysis_results ? (
                   <>
-                    <p className="mt-2 text-sm text-slate-300">
-                      {video.analysis_results.threat_detected
-                        ? 'Threat detected in this recording.'
-                        : 'No threat patterns detected.'}
-                    </p>
-                    <div className="mt-5 space-y-3 text-sm text-slate-200">
-                      {threatMetrics?.map(metric => (
-                        <div key={metric.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                          <span className="text-slate-300">{metric.label}</span>
-                          <span className="font-semibold text-white">{metric.value}</span>
-                        </div>
-                      ))}
+                    <div
+                      className={`mt-4 rounded-2xl border px-4 py-4 heading-font text-sm ${
+                        video.analysis_results.threat_detected
+                          ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+                          : 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+                      }`}
+                    >
+                      {video.analysis_results.threat_detected ? (
+                        <>
+                          <p className="text-xs uppercase tracking-[0.35em]">Immediate attention</p>
+                          <p className="mt-2 text-base">Potential threat pattern detected. Notify response team and review footage now.</p>
+                          <p className="mt-1 text-xs text-white/70">Confidence {Math.round((getConfidenceScore(video) ?? 0) * 100)}%</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs uppercase tracking-[0.35em]">All clear</p>
+                          <p className="mt-2 text-base">No suspicious gait signatures found. Archive or continue monitoring.</p>
+                        </>
+                      )}
                     </div>
+
+                    <div className="mt-5 space-y-3 text-xs text-slate-400">
+                      <p className="heading-font uppercase tracking-[0.35em]">What to do next</p>
+                      <ul className="space-y-2 body-font text-sm text-slate-300">
+                        {video.analysis_results.threat_detected ? (
+                          <>
+                            <li>• Dispatch a guard to the capture zone and cross-check live feeds.</li>
+                            <li>• Download the footage and metrics report for supervisor review.</li>
+                            <li>• Log any ground observations in the incident tracker.</li>
+                          </>
+                        ) : (
+                          <>
+                            <li>• Mark this session as cleared or add notes for later reference.</li>
+                            <li>• Keep monitoring for new uploads with elevated confidence levels.</li>
+                          </>
+                        )}
+                      </ul>
+                    </div>
+
+                    <details className="mt-6 space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <summary className="cursor-pointer text-sm font-semibold text-white heading-font">Technical metrics (optional)</summary>
+                      <div className="mt-3 space-y-3 text-sm text-slate-200">
+                        {threatMetrics?.map(metric => (
+                          <div key={metric.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                            <span className="text-slate-300">{metric.label}</span>
+                            <span className="font-semibold text-white">{metric.value}</span>
+                          </div>
+                        ))}
+                        <div className="space-y-3">
+                          {metricBars.map(bar => (
+                            <MetricBar key={bar.label} {...bar} />
+                          ))}
+                        </div>
+                        <p className="text-[0.65rem] text-slate-500 heading-font uppercase tracking-[0.35em]">
+                          Threshold marker reflects detector boundary ({Number(video.analysis_results.threshold ?? 0.179).toFixed(3)})
+                        </p>
+                      </div>
+                      <Button variant="secondary" className="mt-3" onClick={handleDownloadMetrics}>
+                        Download metrics (JSON)
+                      </Button>
+                    </details>
                   </>
                 ) : (
                   <p className="mt-3 text-sm text-slate-300">Analysis results will appear once processing completes.</p>

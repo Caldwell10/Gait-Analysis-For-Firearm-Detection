@@ -264,9 +264,14 @@ export default function DashboardPage(): JSX.Element {
           <StatCard
             title="Threat Alerts"
             value={statsLoading ? undefined : stats.threats}
-            footer="Flagged by the anomaly detector"
+            footer={
+              stats.threats > 0
+                ? 'Immediate review required'
+                : 'Flagged by the anomaly detector'
+            }
             background="from-rose-400/25 via-rose-500/15 to-rose-300/5"
             accent="bg-rose-400/90 text-rose-950"
+            tone={stats.threats > 0 ? 'alert' : 'default'}
           />
           <StatCard
             title="Avg. Confidence"
@@ -280,6 +285,7 @@ export default function DashboardPage(): JSX.Element {
             footer="Across latest detections"
             background="from-amber-400/20 via-amber-500/10 to-amber-300/5"
             accent="bg-amber-400/90 text-amber-950"
+            tone={stats.averageConfidence !== null && stats.averageConfidence >= 0.85 ? 'success' : 'default'}
           />
         </section>
 
@@ -321,6 +327,39 @@ export default function DashboardPage(): JSX.Element {
                       <span className="text-sm text-slate-400">{segment.percent}%</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold text-white heading-font">Security brief</h2>
+              <p className="mt-1 text-sm text-slate-300 body-font">
+                Plain-language summary for operators. Metrics are archived for download on each session.
+              </p>
+              <div className="mt-5 space-y-3 text-sm body-font">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.35em] text-slate-400 heading-font">Immediate focus</p>
+                  <p className={`mt-2 font-semibold ${stats.threats > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
+                    {stats.threats > 0
+                      ? `${stats.threats} recording${stats.threats === 1 ? '' : 's'} flagged for review`
+                      : 'No anomalies flagged—continue monitoring'}
+                  </p>
+                  {stats.threats > 0 && (
+                    <p className="mt-1 text-xs text-rose-200">
+                      Assign a responder to inspect the highlighted footage in the threat spotlight panel.
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.35em] text-slate-400 heading-font">Queue health</p>
+                  <p className="mt-2 text-slate-200">
+                    {stats.processingActive > 0
+                      ? `${stats.processingActive} upload${stats.processingActive === 1 ? '' : 's'} currently running the gait model.`
+                      : 'Inference queue is clear.'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
+                  Need the raw numbers? Open any session and use “Download metrics” to export the JSON report for analysts.
                 </div>
               </div>
             </div>
@@ -451,23 +490,34 @@ export default function DashboardPage(): JSX.Element {
   );
 }
 
+type StatCardTone = 'default' | 'alert' | 'success';
+
 function StatCard({
   title,
   value,
   footer,
   background,
   accent,
+  tone = 'default',
 }: {
   title: string;
   value: number | string | undefined;
   footer: string;
   background: string;
   accent: string;
+  tone?: StatCardTone;
 }): JSX.Element {
+  const badgeClass =
+    tone === 'alert'
+      ? 'bg-rose-500/90 text-white shadow-[0_0_16px_rgba(244,63,94,0.35)]'
+      : tone === 'success'
+      ? 'bg-emerald-400/90 text-emerald-950'
+      : accent;
+
+  const footerClass = tone === 'alert' ? 'text-rose-200' : 'text-slate-300';
+
   return (
-    <div
-      className={`relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${background} p-6`}
-    >
+    <div className={`relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${background} p-6`}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.35em] text-slate-400 heading-font">{title}</p>
@@ -475,9 +525,11 @@ function StatCard({
             {value === undefined ? '…' : value}
           </p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${accent}`}>Live</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+          {tone === 'alert' ? 'Alert' : tone === 'success' ? 'Stable' : 'Live'}
+        </span>
       </div>
-      <p className="mt-6 text-xs text-slate-300 body-font">{footer}</p>
+      <p className={`mt-6 text-xs body-font ${footerClass}`}>{footer}</p>
       <div className="absolute right-0 top-0 h-24 w-24 translate-x-12 -translate-y-8 rounded-full bg-white/10" />
     </div>
   );
