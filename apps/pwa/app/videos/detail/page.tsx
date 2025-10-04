@@ -3,17 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Button from '../../../src/components/ui/Button';
+import AnalysisProgress from '../../../src/components/ui/AnalysisProgress';
 import { api, ApiError, VideoMetadata, VideoUpdateRequest, getAuthToken } from '../../../src/lib/api';
 import { useSession } from '../../../src/lib/session';
 
-const STATUS_LABEL: Record<string, string> = {
+type StatusKey = 'pending' | 'processing' | 'completed' | 'failed';
+
+const STATUS_LABEL: Record<StatusKey, string> = {
   pending: 'Queued',
   processing: 'Processing',
   completed: 'Completed',
   failed: 'Failed',
 };
 
-const STATUS_BADGE: Record<string, string> = {
+const STATUS_BADGE: Record<StatusKey, string> = {
   pending: 'bg-amber-400/90 text-amber-950',
   processing: 'bg-sky-400/90 text-sky-950',
   completed: 'bg-emerald-400/90 text-emerald-950',
@@ -229,6 +232,8 @@ export default function VideoDetailPage(): JSX.Element {
                     {STATUS_LABEL[video.analysis_status] ?? video.analysis_status}
                   </span>
                 </div>
+
+                <AnalysisProgress status={video.analysis_status as StatusKey} size="sm" />
 
                 <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/40">
                   {videoError ? (
