@@ -1,7 +1,4 @@
 import uuid
-import asyncio
-import random
-import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
@@ -22,6 +19,7 @@ from ..core.file_handler import (
     get_storage_stats,
     cleanup_orphaned_files
 )
+from ..core.video_repair import repair_if_needed
 from ..crud import video as video_crud
 from ..models.user import User, VideoRecord, UserRole
 from ..schemas.video import (
@@ -37,15 +35,19 @@ router = APIRouter(prefix="/videos", tags=["videos"])
 
 def process_video_analysis_sync(video_id: str):
     """
-    Background task to process video analysis
-    Simulates ML processing pipeline for now
+    Background task to process video analysis with REAL ML inference
+    Uses trained ConvAutoencoder model (88.1% AUC)
     """
+    from ml.service import analyze_video_sync
+
     # Create a new database session for the background task
     db = next(get_db())
 
     try:
-        # Simulate processing time
-        time.sleep(3)
+        # Get video record to find file path
+        video = video_crud.get_video_by_id(db=db, video_id=uuid.UUID(video_id))
+        if not video:
+            raise Exception(f"Video {video_id} not found in database")
 
         # Update status to processing
         video_crud.update_analysis_status(
@@ -55,39 +57,24 @@ def process_video_analysis_sync(video_id: str):
             analyzed_by=None
         )
 
-        # Simulate more processing time
-        time.sleep(5)
+        # Run REAL ML analysis on the video file
+        print(f"🔬 Starting ML analysis for video {video_id}")
+        analysis_results = analyze_video_sync(video.file_path)
 
-        # Generate mock analysis results
-        threat_detected = random.choice([True, False])
-        confidence = random.uniform(0.6, 0.95)
-
-        mock_results = {
-            "threat_detected": threat_detected,
-            "confidence_score": round(confidence, 3),
-            "threat_confidence": round(confidence if threat_detected else 1-confidence, 3),
-            "combined_score": round(random.uniform(0.1, 0.4), 3),
-            "reconstruction_error": round(random.uniform(0.05, 0.25), 3),
-            "latent_score": round(random.uniform(0.8, 1.5), 3),
-            "processing_time": "8.2s",
-            "algorithm_version": "ConvAutoencoder_v1.0_mock",
-            "gei_generated": True,
-            "analysis_timestamp": str(uuid.uuid4())
-        }
-
-        # Update status to completed
+        # Update status to completed with real results
         video_crud.update_analysis_status(
             db=db,
             video_id=uuid.UUID(video_id),
             status_update=VideoAnalysisStatusUpdate(
                 status="completed",
-                analysis_results=mock_results
+                analysis_results=analysis_results
             ),
             analyzed_by=None
         )
 
-        threat_status = 'THREAT' if threat_detected else 'NORMAL'
-        print(f"✅ Video {video_id} analysis completed: {threat_status}")
+        threat_status = 'THREAT DETECTED' if analysis_results['threat_detected'] else 'NORMAL'
+        confidence = analysis_results['confidence_score']
+        print(f"✅ Video {video_id} analysis completed: {threat_status} (confidence: {confidence})")
 
     except Exception as e:
         # Update status to failed
@@ -143,6 +130,19 @@ async def upload_video(
             video_id=str(video_id),
             original_filename=file.filename
         )
+
+        # Check and repair video if needed
+        needs_repair, final_path, repaired = repair_if_needed(file_path)
+
+        if needs_repair and not repaired:
+            # Failed to repair
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Video file has corrupted metadata and could not be repaired. Please re-export the video with proper encoding."
+            )
+
+        if repaired:
+            print(f"✅ Video {video_id} automatically repaired - corrupted metadata fixed")
 
         # Create database record
         video_record = video_crud.create_video_record(
