@@ -60,59 +60,48 @@ export default function SignupPage() {
   };
 
   return (
-    <AuthLayout
-      title="Create your account"
-      description="Get started with thermal gait screening"
-    >
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <AuthLayout title="Create your account" description="Get started with thermal gait screening">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-7 body-font">
         <FormError error={serverError} />
-        
-        <TextField
-          label="Email address"
-          type="email"
-          autoComplete="email"
-          required
-          {...register('email')}
-          error={errors.email?.message}
-        />
 
-        <PasswordField
-          label="Password"
-          autoComplete="new-password"
-          required
-          {...register('password')}
-          error={errors.password?.message}
-          helperText="Password must be at least 12 characters long"
-        />
+        <div className="space-y-5">
+          <TextField
+            label="Email address"
+            type="email"
+            autoComplete="email"
+            required
+            {...register('email')}
+            error={errors.email?.message}
+          />
 
-        <PasswordField
-          label="Confirm password"
-          autoComplete="new-password"
-          required
-          {...register('confirmPassword')}
-          error={errors.confirmPassword?.message}
-        />
+          <PasswordField
+            label="Password"
+            autoComplete="new-password"
+            required
+            {...register('password')}
+            error={errors.password?.message}
+            helperText="Password must be at least 12 characters long"
+          />
 
-        <Button
-          type="submit"
-          className="w-full"
-          loading={loading}
-          disabled={loading}
-        >
-          {loading ? 'Creating account...' : 'Create account'}
+          <PasswordField
+            label="Confirm password"
+            autoComplete="new-password"
+            required
+            {...register('confirmPassword')}
+            error={errors.confirmPassword?.message}
+          />
+        </div>
+
+        <Button type="submit" className="w-full" loading={loading} disabled={loading}>
+          {loading ? 'Creating account…' : 'Create account'}
         </Button>
 
-        <div className="text-center">
-          <span className="text-sm text-gray-600">
-            Already have an account?{' '}
-            <a
-              href="/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
-            >
-              Sign in
-            </a>
-          </span>
-        </div>
+        <p className="text-center text-sm text-slate-400">
+          Already have an account?{' '}
+          <a href="/auth/login" className="font-semibold text-[#8b5cf6] hover:text-[#a855f7]">
+            Sign in
+          </a>
+        </p>
       </form>
     </AuthLayout>
   );

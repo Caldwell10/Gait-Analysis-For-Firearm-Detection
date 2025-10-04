@@ -4,7 +4,13 @@ import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSession } from '../lib/session';
 
-const PUBLIC_ROUTES = ['/auth/login', '/auth/signup', '/auth/forgot-password', '/auth/reset-password'];
+const PUBLIC_ROUTES = [
+  '/auth/login',
+  '/auth/signup',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/oauth/callback',
+];
 
 interface AuthGuardProps {
   children: React.ReactNode;
