@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
     allowed_origins_str: str = "http://localhost:3000,http://127.0.0.1:3000"  # Backward compatibility
 
+    # OAuth Configuration
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/oauth/google/callback")
+    github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
+    github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    frontend_oauth_redirect_url: str = os.getenv("FRONTEND_OAUTH_REDIRECT_URL", "http://localhost:3000/auth/oauth/callback")
+
     # File Upload Configuration
     upload_base_dir: str = os.getenv("UPLOAD_BASE_DIR", "uploads")
     max_file_size_mb: int = int(os.getenv("MAX_FILE_SIZE_MB", "100"))

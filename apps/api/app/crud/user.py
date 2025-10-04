@@ -17,6 +17,29 @@ def get_user_by_id(db: Session, user_id: uuid.UUID) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
+def get_user_by_oauth(db: Session, provider: str, oauth_id: str) -> Optional[User]:
+    """Get user by OAuth provider and ID."""
+    return db.query(User).filter(
+        and_(User.oauth_provider == provider, User.oauth_id == oauth_id)
+    ).first()
+
+
+def create_oauth_user(db: Session, email: str, provider: str, oauth_id: str, role: UserRole = UserRole.SECURITY_PERSONNEL) -> User:
+    """Create a new OAuth user (no password)."""
+    db_user = User(
+        email=email,
+        password_hash=None,  # OAuth users don't have passwords
+        oauth_provider=provider,
+        oauth_id=oauth_id,
+        role=role,
+        is_active=True
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
 def create_user(db: Session, email: str, password: str, role: UserRole = UserRole.SECURITY_PERSONNEL) -> User:
     """Create a new user."""
     hashed_password = hash_password(password)
