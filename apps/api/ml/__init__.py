@@ -1,1 +1,0 @@
-# ML Module for Thermal Gait Analysis
