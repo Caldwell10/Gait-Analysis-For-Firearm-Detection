@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List
 from ..core.database import get_db
@@ -8,6 +9,8 @@ from ..core.security import (
     create_access_token, decode_access_token,
     generate_password_reset_token, verify_reset_token
 )
+from ..core.oauth import oauth
+from ..core.config import settings
 from ..schemas.auth import (
     SignupRequest, LoginRequest, LoginResponse,
     ForgotPasswordRequest, ResetPasswordRequest, UserResponse,
@@ -19,7 +22,7 @@ from ..crud.user import (
     get_users, get_users_count, update_user_role, activate_user, deactivate_user,
     get_user_by_id, create_password_reset_token, get_valid_reset_token,
     mark_reset_token_used, update_user_password, create_user_session,
-    revoke_user_session, is_session_revoked
+    revoke_user_session, is_session_revoked, get_user_by_oauth, create_oauth_user
 )
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -333,4 +336,118 @@ async def toggle_user_active_status(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid user ID format"
+        )
+
+# OAuth Endpoints
+@router.get("/oauth/{provider}/login")
+async def oauth_login(provider: str, request: Request):
+    """Initiate OAuth flow for Google or GitHub"""
+    if provider not in ['google', 'github']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported OAuth provider: {provider}"
+        )
+
+    # Redirect URI for OAuth callback
+    redirect_uri = request.url_for('oauth_callback', provider=provider)
+
+    return await oauth.create_client(provider).authorize_redirect(request, redirect_uri)
+
+
+@router.get("/oauth/{provider}/callback")
+async def oauth_callback(provider: str, request: Request, db: Session = Depends(get_db)):
+    """Handle OAuth callback from Google or GitHub"""
+    if provider not in ['google', 'github']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported OAuth provider: {provider}"
+        )
+
+    try:
+        # Get OAuth token
+        token = await oauth.create_client(provider).authorize_access_token(request)
+
+        # Get user info from provider
+        if provider == 'google':
+            user_info = token.get('userinfo')
+            if not user_info:
+                user_info = await oauth.google.userinfo(token=token)
+            oauth_id = user_info['sub']
+            email = user_info['email']
+        elif provider == 'github':
+            user_info = await oauth.github.get('user', token=token)
+            user_data = user_info.json()
+            oauth_id = str(user_data['id'])
+            email = user_data.get('email')
+
+            # GitHub might not return email if private
+            if not email:
+                emails = await oauth.github.get('user/emails', token=token)
+                email_data = emails.json()
+                primary_email = next((e for e in email_data if e['primary']), None)
+                if primary_email:
+                    email = primary_email['email']
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Could not retrieve email from GitHub"
+                    )
+
+        # Check if user exists by OAuth credentials
+        user = get_user_by_oauth(db, provider, oauth_id)
+
+        if not user:
+            # Check if email already exists (user might have created account with password)
+            user = get_user_by_email(db, email)
+
+            if user:
+                # Link OAuth to existing account
+                user.oauth_provider = provider
+                user.oauth_id = oauth_id
+                db.commit()
+                db.refresh(user)
+            else:
+                # Create new OAuth user
+                user = create_oauth_user(db, email, provider, oauth_id)
+
+        # Update last login
+        update_user_last_login(db, user.id)
+
+        # Create JWT token
+        token_data = {
+            "user_id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "jti": str(uuid.uuid4())
+        }
+
+        access_token = create_access_token(token_data)
+        expires_at = datetime.utcnow() + timedelta(minutes=15)
+
+        # Store session in database
+        create_user_session(db, user.id, token_data["jti"], expires_at)
+
+        # Prepare redirect response to frontend callback handler
+        redirect_url = f"{settings.frontend_oauth_redirect_url}?provider={provider}&token={access_token}"
+        redirect_response = RedirectResponse(url=redirect_url, status_code=303)
+
+        # Set cookie on redirect response for same-origin clients (optional in dev)
+        redirect_response.set_cookie(
+            key="access_token",
+            value=access_token,
+            max_age=900,  # 15 minutes
+            httponly=False,
+            secure=False,  # Set to False for localhost development
+            samesite="lax",
+            path="/",
+            domain=None
+        )
+
+        return redirect_response
+
+    except Exception as e:
+        print(f"OAuth error for {provider}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"OAuth authentication failed: {str(e)}"
         )
