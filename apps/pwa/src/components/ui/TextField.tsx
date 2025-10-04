@@ -13,15 +13,15 @@ const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
     const helperId = helperText ? `${inputId}-helper` : undefined;
 
     const inputClasses = [
-      'appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400',
-      'focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm',
-      error ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : '',
+      'block w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm text-slate-100 placeholder-slate-400 shadow-sm transition',
+      'focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/60 focus:ring-offset-2 focus:ring-offset-slate-950',
+      error ? 'border-rose-500/40 focus:border-rose-400 focus:ring-rose-400/60' : '',
       className
     ].filter(Boolean).join(' ');
 
     return (
       <div>
-        <label htmlFor={inputId} className="block text-sm font-medium text-gray-700">
+        <label htmlFor={inputId} className="block text-sm font-medium text-slate-200 heading-font">
           {label}
           {props.required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -36,12 +36,12 @@ const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
           />
         </div>
         {error && (
-          <p id={errorId} className="mt-2 text-sm text-red-600" role="alert">
+          <p id={errorId} className="mt-2 text-sm text-rose-300" role="alert">
             {error}
           </p>
         )}
         {helperText && !error && (
-          <p id={helperId} className="mt-2 text-sm text-gray-500">
+          <p id={helperId} className="mt-2 text-sm text-slate-400 body-font">
             {helperText}
           </p>
         )}

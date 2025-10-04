@@ -1,426 +1,486 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Button from '../../src/components/ui/Button';
 import { api, VideoListResponse } from '../../src/lib/api';
 import { useSession } from '../../src/lib/session';
 
-export default function DashboardPage() {
-  const [loading, setLoading] = useState(false);
+type VideoItem = VideoListResponse['videos'][number];
+
+type StatusKey = 'pending' | 'processing' | 'completed' | 'failed';
+
+const STATUS_COLORS: Record<StatusKey, string> = {
+  pending: 'bg-amber-400/90 text-amber-950',
+  processing: 'bg-sky-400/90 text-sky-950',
+  completed: 'bg-emerald-400/90 text-emerald-950',
+  failed: 'bg-rose-400/90 text-rose-950',
+};
+
+const STATUS_LABELS: Record<StatusKey, string> = {
+  pending: 'Queued',
+  processing: 'Processing',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
+function toPercent(value: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function parseConfidence(video: VideoItem): number | null {
+  const raw =
+    video.analysis_results?.confidence_score ??
+    video.analysis_results?.threat_confidence ??
+    video.analysis_results?.confidence;
+
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'number') return raw;
+
+  const parsed = parseFloat(String(raw));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+
+  const diffMs = date.getTime() - Date.now();
+  const diffMinutes = Math.round(diffMs / (1000 * 60));
+  const thresholds: Array<[number, Intl.RelativeTimeFormatUnit]> = [
+    [60, 'minute'],
+    [24, 'hour'],
+    [30, 'day'],
+    [12, 'month'],
+  ];
+
+  let value = diffMinutes;
+  let unit: Intl.RelativeTimeFormatUnit = 'minute';
+
+  if (Math.abs(value) >= 60) {
+    value = Math.round(value / 60);
+    unit = 'hour';
+  }
+  if (Math.abs(value) >= 24 && unit === 'hour') {
+    value = Math.round(value / 24);
+    unit = 'day';
+  }
+  if (Math.abs(value) >= 30 && unit === 'day') {
+    value = Math.round(value / 30);
+    unit = 'month';
+  }
+  if (Math.abs(value) >= 12 && unit === 'month') {
+    value = Math.round(value / 12);
+    unit = 'year';
+  }
+
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  return rtf.format(value, unit);
+}
+
+export default function DashboardPage(): JSX.Element {
+  const [loadingLogout, setLoadingLogout] = useState(false);
   const [videosData, setVideosData] = useState<VideoListResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const { user, clearSession } = useSession();
   const router = useRouter();
-
-  const fetchDashboardData = async () => {
-    try {
-      setStatsLoading(true);
-      const data = await api.getVideos({ page: 1, per_page: 5 });
-      setVideosData(data);
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
+  const { user, clearSession } = useSession();
 
   useEffect(() => {
-    if (user) {
-      fetchDashboardData();
+    if (!user) return;
+
+    async function load() {
+      try {
+        setStatsLoading(true);
+        const data = await api.getVideos({ page: 1, per_page: 20 });
+        setVideosData(data);
+      } catch (error) {
+        console.error('Failed to load dashboard data', error);
+      } finally {
+        setStatsLoading(false);
+      }
     }
+
+    load();
   }, [user]);
+
+  const stats = useMemo(() => {
+    const counts: Record<StatusKey, number> = {
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+    };
+
+    let threats = 0;
+    let confidenceAccumulator = 0;
+    let confidenceSamples = 0;
+
+    const videos = videosData?.videos ?? [];
+
+    videos.forEach(video => {
+      const status = video.analysis_status as StatusKey;
+      if (status in counts) counts[status] += 1;
+
+      if (video.analysis_results?.threat_detected) {
+        threats += 1;
+      }
+
+      const confidence = parseConfidence(video);
+      if (confidence !== null) {
+        confidenceAccumulator += confidence;
+        confidenceSamples += 1;
+      }
+    });
+
+    return {
+      total: videosData?.total ?? videos.length,
+      counts,
+      threats,
+      averageConfidence:
+        confidenceSamples > 0 ? confidenceAccumulator / confidenceSamples : null,
+      processingActive: counts.pending + counts.processing,
+    };
+  }, [videosData]);
+
+  const recentVideos = useMemo(() => {
+    return (videosData?.videos ?? [])
+      .slice(0, 5)
+      .map(video => ({
+        ...video,
+        created_label: formatRelativeTime(video.created_at),
+      }));
+  }, [videosData]);
+
+  const highlightedThreat = useMemo(() => {
+    const threats = (videosData?.videos ?? []).filter(
+      video => video.analysis_results?.threat_detected
+    );
+
+    if (threats.length === 0) return null;
+
+    return threats.sort((a, b) => {
+      const confidenceA = parseConfidence(a) ?? 0;
+      const confidenceB = parseConfidence(b) ?? 0;
+      return confidenceB - confidenceA;
+    })[0];
+  }, [videosData]);
+
+  const statusSegments = useMemo(() => {
+    const entries: Array<{ key: StatusKey; value: number; percent: number }> = [];
+    const total = Object.values(stats.counts).reduce((acc, value) => acc + value, 0);
+
+    (Object.keys(stats.counts) as StatusKey[]).forEach(key => {
+      const value = stats.counts[key];
+      entries.push({ key, value, percent: toPercent(value, total) });
+    });
+
+    return { entries, total };
+  }, [stats.counts]);
 
   const handleLogout = async () => {
     try {
-      setLoading(true);
+      setLoadingLogout(true);
       await api.logout();
-      clearSession();
-      router.push('/login');
     } catch (error) {
-      // Even if logout API fails, clear local session
-      clearSession();
-      router.push('/login');
+      console.error('Logout failed, clearing local session anyway', error);
     } finally {
-      setLoading(false);
+      clearSession();
+      router.push('/auth/login');
+      setLoadingLogout(false);
     }
   };
 
-  const getStatusCounts = () => {
-    if (!videosData) return { pending: 0, processing: 0, completed: 0, failed: 0 };
-
-    const counts = { pending: 0, processing: 0, completed: 0, failed: 0 };
-    videosData.videos.forEach(video => {
-      if (video.analysis_status in counts) {
-        counts[video.analysis_status as keyof typeof counts]++;
-      }
-    });
-    return counts;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  // Handled by the auth guard in layout
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col">
-        <div className="p-6">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">ThermalWatch</h1>
-              <p className="text-xs text-gray-500">Gait Analysis System</p>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 px-4 space-y-2">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider px-3 mb-3">MENU</div>
-
-          <a href="#" className="bg-emerald-50 text-emerald-700 group flex items-center px-3 py-2 text-sm font-medium rounded-lg">
-            <svg className="text-emerald-500 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
-            Dashboard
-          </a>
-
-          <button onClick={() => router.push('/videos')} className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-lg w-full text-left">
-            <svg className="text-gray-400 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4z" />
-            </svg>
-            Videos
-            <span className="ml-auto bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">{videosData?.total || 0}</span>
-          </button>
-
-          <button onClick={() => router.push('/videos/list')} className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-lg w-full text-left">
-            <svg className="text-gray-400 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Analytics
-          </button>
-
-          <div className="pt-6">
-            <div className="text-xs font-medium text-gray-500 uppercase tracking-wider px-3 mb-3">GENERAL</div>
-            <button className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-3 py-2 text-sm font-medium rounded-lg w-full text-left">
-              <svg className="text-gray-400 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Settings
-            </button>
-          </div>
-        </nav>
-
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-              <span className="text-sm font-medium text-gray-700">{user.email.charAt(0).toUpperCase()}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
-              <p className="text-xs text-gray-500">{user.role.replace('_', ' ')}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              disabled={loading}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-          </div>
-        </div>
+    <div className="relative min-h-screen bg-slate-950 text-slate-100">
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(94,234,212,0.18),_transparent_65%),radial-gradient(circle_at_bottom,_rgba(59,130,246,0.15),_transparent_55%)]" />
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-sm text-gray-600">Monitor, analyze, and manage thermal surveillance data</p>
-            </div>
-            <div className="flex items-center space-x-3">
+      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 pb-16 pt-10 lg:px-10">
+        <header className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-white/5 px-8 py-8 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-400 heading-font">Thermal surveillance control</p>
+            <h1 className="mt-2 text-3xl font-semibold text-white heading-font lg:text-4xl">
+              Welcome back, {user.email || 'Operator'}
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm text-slate-300 body-font">
+              You are monitoring {stats.total} captured sessions. {stats.processingActive}{' '}
+              {stats.processingActive === 1 ? 'record is' : 'records are'} actively being analyzed
+              right now.
+            </p>
+          </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Button
-                onClick={() => router.push('/videos')}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Upload Video
-              </Button>
-              <Button variant="secondary">
-                Import Data
-              </Button>
-            </div>
+              className="bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#0ea5e9] text-white shadow-[0_10px_30px_rgba(99,102,241,0.25)]"
+              onClick={() => router.push('/videos')}
+            >
+              Upload thermal video
+            </Button>
+              <Button
+              variant="secondary"
+              className="border-[var(--tg-color-border)] bg-white/5 text-slate-200 hover:bg-white/10"
+              onClick={() => router.push('/videos/list')}
+            >
+              Manage library
+            </Button>
+              <Button
+              variant="secondary"
+              className="border-[var(--tg-color-border)] bg-transparent text-slate-300 hover:bg-white/10"
+              onClick={handleLogout}
+              disabled={loadingLogout}
+            >
+              {loadingLogout ? 'Signing out…' : 'Sign out'}
+            </Button>
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 bg-gray-50">
-          <div className="max-w-7xl mx-auto">
-            {/* Overview Stats - Donezo Style */}
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-              {/* Total Videos - Primary Card */}
-              <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-6 text-white relative overflow-hidden">
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium opacity-90">Total Videos</h3>
-                    <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="text-3xl font-bold mb-2">
-                    {statsLoading ? '...' : videosData?.total || 0}
-                  </div>
-                  <div className="flex items-center text-sm opacity-90">
-                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
-                    </svg>
-                    <span>Increased from last month</span>
-                  </div>
+        <section className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4 body-font">
+          <StatCard
+            title="Total Captures"
+            value={statsLoading ? undefined : stats.total}
+            footer="Across the monitored perimeter"
+            background="from-emerald-400/20 via-emerald-500/10 to-emerald-300/10"
+            accent="bg-emerald-400/90 text-emerald-950"
+          />
+          <StatCard
+            title="Active Queue"
+            value={statsLoading ? undefined : stats.processingActive}
+            footer="Awaiting ML inference"
+            background="from-sky-400/20 via-sky-500/10 to-sky-300/5"
+            accent="bg-sky-400/90 text-sky-950"
+          />
+          <StatCard
+            title="Threat Alerts"
+            value={statsLoading ? undefined : stats.threats}
+            footer="Flagged by the anomaly detector"
+            background="from-rose-400/25 via-rose-500/15 to-rose-300/5"
+            accent="bg-rose-400/90 text-rose-950"
+          />
+          <StatCard
+            title="Avg. Confidence"
+            value={
+              statsLoading
+                ? undefined
+                : stats.averageConfidence !== null
+                ? `${Math.round(stats.averageConfidence * 100)}%`
+                : '—'
+            }
+            footer="Across latest detections"
+            background="from-amber-400/20 via-amber-500/10 to-amber-300/5"
+            accent="bg-amber-400/90 text-amber-950"
+          />
+        </section>
+
+        <section className="mt-10 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-white heading-font">Processing landscape</h2>
+                  <p className="text-sm text-slate-300 body-font">
+                    Distribution of recordings by analysis status
+                  </p>
                 </div>
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white bg-opacity-10 rounded-full -mr-16 -mt-16"></div>
+                <span className="text-sm text-slate-400">Last sync: {new Date().toLocaleTimeString()}</span>
               </div>
 
-              {/* Threats Detected */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-gray-600">Threats Detected</h3>
-                  <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
-                    <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                  </div>
+              <div className="mt-6 flex flex-col gap-4">
+                <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
+                  {statusSegments.entries.map(segment => (
+                    <div
+                      key={segment.key}
+                      className={`h-full transition-all ${STATUS_COLORS[segment.key]}`}
+                      style={{ width: `${segment.percent}%` }}
+                    />
+                  ))}
                 </div>
-                <div className="text-3xl font-bold text-gray-900 mb-2">
-                  {statsLoading ? '...' : Math.floor((videosData?.total || 0) * 0.15)}
-                </div>
-                <div className="flex items-center text-sm text-gray-500">
-                  <svg className="w-4 h-4 mr-1 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-                  </svg>
-                  <span>15% detection rate</span>
-                </div>
-              </div>
-
-              {/* Processing Queue */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-gray-600">Processing Queue</h3>
-                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-                    <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="text-3xl font-bold text-gray-900 mb-2">
-                  {statsLoading ? '...' : getStatusCounts().processing + getStatusCounts().pending}
-                </div>
-                <div className="flex items-center text-sm text-gray-500">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse"></div>
-                  <span>Active processing</span>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Analytics Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-              {/* Threat Analysis Chart */}
-              <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">Threat Analysis</h3>
-                  <div className="flex items-center space-x-2 text-sm text-gray-500">
-                    <span>76%</span>
-                    <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
-                  </div>
-                </div>
-
-                {/* Simple Bar Chart */}
-                <div className="flex items-end justify-between h-48 mb-4">
-                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
-                    <div key={day} className="flex flex-col items-center space-y-2">
-                      <div className="flex flex-col items-center space-y-1">
-                        <div
-                          className={`w-8 rounded-t-lg ${
-                            index === 2 || index === 4 ? 'bg-emerald-500' :
-                            index === 1 || index === 3 ? 'bg-emerald-400' : 'bg-gray-200'
-                          }`}
-                          style={{
-                            height: `${Math.random() * 120 + 40}px`
-                          }}
-                        ></div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {statusSegments.entries.map(segment => (
+                    <div
+                      key={segment.key}
+                      className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 heading-font"
+                    >
+                      <div>
+                        <p className="text-xs uppercase tracking-widest text-slate-400">
+                          {STATUS_LABELS[segment.key]}
+                        </p>
+                        <p className="mt-1 text-lg font-semibold text-white">{segment.value}</p>
                       </div>
-                      <span className="text-xs text-gray-500 font-medium">{day}</span>
+                      <span className="text-sm text-slate-400">{segment.percent}%</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* Processing Status */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Processing Status</h3>
-
-                {/* Progress Ring */}
-                <div className="flex items-center justify-center mb-6">
-                  <div className="relative w-32 h-32">
-                    <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
-                      <circle cx="60" cy="60" r="50" fill="none" stroke="#f3f4f6" strokeWidth="8"/>
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="50"
-                        fill="none"
-                        stroke="#10b981"
-                        strokeWidth="8"
-                        strokeDasharray={`${(getStatusCounts().completed / (videosData?.total || 1)) * 314} 314`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-900">
-                          {Math.round((getStatusCounts().completed / (videosData?.total || 1)) * 100)}%
-                        </div>
-                        <div className="text-xs text-gray-500">Completed</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Status Legend */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-                      <span className="text-sm text-gray-600">Completed</span>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">{getStatusCounts().completed}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                      <span className="text-sm text-gray-600">Processing</span>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">{getStatusCounts().processing}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
-                      <span className="text-sm text-gray-600">Pending</span>
-                    </div>
-                    <span className="text-sm font-medium text-gray-900">{getStatusCounts().pending}</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
-            {/* Recent Activity */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => router.push('/videos/list')}
-                    className="text-sm"
-                  >
-                    View All
-                  </Button>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-white heading-font">Recent activity</h2>
+                  <p className="text-sm text-slate-300 body-font">
+                    Latest uploads and their analysis state
+                  </p>
                 </div>
+                <Button
+                  variant="secondary"
+                  className="border-white/20 bg-transparent text-slate-300 hover:bg-white/10"
+                  onClick={() => router.push('/videos/list')}
+                >
+                  View all
+                </Button>
+              </div>
 
-                {statsLoading ? (
-                  <div className="flex justify-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-                  </div>
-                ) : videosData?.videos.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-1">No videos uploaded</h3>
-                    <p className="text-sm text-gray-500 mb-6">Get started by uploading your first thermal video for analysis.</p>
-                    <Button
-                      onClick={() => router.push('/videos')}
-                      className="bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      Upload Video
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {videosData?.videos.slice(0, 5).map((video) => (
-                      <div key={video.id} className="flex items-center space-x-4 p-4 hover:bg-gray-50 rounded-lg transition-colors">
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                              {video.original_filename}
-                            </p>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              video.analysis_status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
-                              video.analysis_status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                              video.analysis_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }`}>
-                              {video.analysis_status === 'completed' && '✓ '}
-                              {video.analysis_status}
-                            </span>
-                          </div>
-                          <div className="flex items-center mt-1 text-sm text-gray-500">
-                            <span>{video.file_size}</span>
-                            <span className="mx-2">•</span>
-                            <span>{formatDate(video.created_at)}</span>
-                          </div>
-                        </div>
-
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => router.push(`/videos/detail?id=${video.id}`)}
-                          className="text-xs"
-                        >
-                          View
-                        </Button>
-                      </div>
-                    ))}
+              <div className="mt-6 space-y-4">
+                {recentVideos.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 px-4 py-6 text-center text-sm text-slate-400">
+                    Upload a thermal session to kick off analysis.
                   </div>
                 )}
+
+                {recentVideos.map(video => (
+                  <div
+                    key={video.id}
+                    className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <h3 className="text-sm font-semibold text-white heading-font">{video.original_filename}</h3>
+                      <p className="text-xs text-slate-300 body-font">
+                        {video.file_size} · {video.created_label}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <StatusBadge status={video.analysis_status as StatusKey} />
+                      <button
+                        onClick={() => router.push(`/videos/detail?id=${video.id}`)}
+                        className="rounded-full border border-white/20 px-4 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
-        </main>
+
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold text-white heading-font">Threat spotlight</h2>
+              <p className="text-sm text-slate-300 body-font">
+                Highest confidence anomaly in the current batch
+              </p>
+
+              {highlightedThreat ? (
+                <div className="mt-6 space-y-4">
+                  <div className="rounded-2xl bg-gradient-to-r from-rose-500/20 via-rose-400/15 to-transparent p-4 heading-font">
+                    <p className="text-xs uppercase tracking-[0.35em] text-rose-200/80">Threat detected</p>
+                    <p className="mt-1 text-lg font-semibold text-white">
+                      {highlightedThreat.original_filename}
+                    </p>
+                    <p className="text-sm text-rose-100/80 body-font">
+                      Detection confidence {Math.round((parseConfidence(highlightedThreat) ?? 0) * 100)}%
+                    </p>
+                  </div>
+                  <div className="space-y-3 text-sm text-slate-200">
+                    <p className="body-font">
+                      Combined score:{' '}
+                      <span className="font-semibold text-white">
+                        {highlightedThreat.analysis_results?.combined_score ?? '—'}
+                      </span>
+                    </p>
+                    <p className="body-font">
+                      Reconstruction error:{' '}
+                      <span className="font-semibold text-white">
+                        {highlightedThreat.analysis_results?.reconstruction_error ?? '—'}
+                      </span>
+                    </p>
+                    <p className="body-font">
+                      Latent distance:{' '}
+                      <span className="font-semibold text-white">
+                        {highlightedThreat.analysis_results?.latent_score ?? '—'}
+                      </span>
+                    </p>
+                  </div>
+                  <Button
+                    className="w-full bg-rose-500 hover:bg-rose-400 text-slate-950"
+                    onClick={() => router.push(`/videos/detail?id=${highlightedThreat.id}`)}
+                  >
+                    Review footage
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/5 px-4 py-6 text-sm text-slate-300">
+                  No anomalies detected in the current set. Great job keeping the perimeter secure.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-lg font-semibold text-white heading-font">Operational tips</h2>
+              <ul className="mt-4 space-y-3 text-sm text-slate-200 body-font">
+                <li className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  • Keep thermal captures between 5–20 seconds for optimal GEI reconstruction.
+                </li>
+                <li className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  • Re-run uploads with corrupted metadata using the automated repair to avoid blind spots.
+                </li>
+                <li className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  • Schedule manual reviews for high-confidence anomalies flagged twice within 24 hours.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  footer,
+  background,
+  accent,
+}: {
+  title: string;
+  value: number | string | undefined;
+  footer: string;
+  background: string;
+  accent: string;
+}): JSX.Element {
+  return (
+    <div
+      className={`relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br ${background} p-6`}
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.35em] text-slate-400 heading-font">{title}</p>
+          <p className="mt-3 text-3xl font-semibold text-white heading-font">
+            {value === undefined ? '…' : value}
+          </p>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${accent}`}>Live</span>
+      </div>
+      <p className="mt-6 text-xs text-slate-300 body-font">{footer}</p>
+      <div className="absolute right-0 top-0 h-24 w-24 translate-x-12 -translate-y-8 rounded-full bg-white/10" />
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: StatusKey }): JSX.Element {
+  return (
+    <span className={`rounded-full px-3 py-1 text-xs font-semibold heading-font ${STATUS_COLORS[status]}`}>
+      {STATUS_LABELS[status]}
+    </span>
   );
 }
