@@ -1,0 +1,24 @@
+:root {
+  --tg-font-heading: var(--font-heading);
+  --tg-font-body: var(--font-inter);
+
+  --tg-color-bg: #0f172a;
+  --tg-color-surface: rgba(17, 25, 40, 0.65);
+  --tg-color-surface-subtle: rgba(15, 23, 42, 0.55);
+  --tg-color-border: rgba(148, 163, 184, 0.2);
+  --tg-color-border-strong: rgba(148, 163, 184, 0.35);
+  --tg-color-text: #e2e8f0;
+  --tg-color-text-muted: #94a3b8;
+  --tg-color-primary: linear-gradient(135deg, #8b5cf6 0%, #6366f1 55%, #0ea5e9 100%);
+  --tg-color-primary-solid: #7c3aed;
+  --tg-color-secondary: rgba(148, 163, 184, 0.2);
+  --tg-color-success: #22c55e;
+  --tg-color-warning: #f59e0b;
+  --tg-color-danger: #ef4444;
+}
+
+body {
+  font-family: var(--tg-font-body), 'Inter', sans-serif;
+  background-color: var(--tg-color-bg);
+  color: var(--tg-color-text);
+}
