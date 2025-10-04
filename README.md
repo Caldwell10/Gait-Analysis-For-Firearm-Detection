@@ -80,21 +80,21 @@ The Thermal Gait Surveillance System analyzes thermal video footage to identify 
 
 3. **Install backend dependencies**
    ```bash
-   cd apps/api
+   cd backend
    pip install -r requirements.txt
    ```
 
 4. **Install frontend dependencies**
    ```bash
-   cd ../pwa
+   cd ../frontend
    npm install
    ```
 
 5. **Set up environment variables**
    ```bash
    # Copy example environment files
-   cp .env.example .env.local  # Frontend
-   cp ../api/.env.example ../api/.env  # Backend
+   cp frontend/.env.example frontend/.env.local  # Frontend
+   cp backend/.env.example backend/.env          # Backend
 
    # Configure your database URL and other settings
    ```
@@ -103,8 +103,8 @@ The Thermal Gait Surveillance System analyzes thermal video footage to identify 
 
 1. **Start the backend server**
    ```bash
-   cd apps/api
-   source ../../thermal-env/bin/activate
+   cd backend
+   source ../thermal-env/bin/activate
    python run_server.py
    ```
    Backend will be available at: http://localhost:8000
@@ -113,7 +113,7 @@ The Thermal Gait Surveillance System analyzes thermal video footage to identify 
 
 2. **Start the frontend development server**
    ```bash
-   cd apps/pwa
+   cd frontend
    npm run dev
    ```
    Frontend will be available at: http://localhost:3000
@@ -220,7 +220,7 @@ The Thermal Gait Surveillance System analyzes thermal video footage to identify 
 
 ## 🔧 Configuration
 
-### Backend Configuration (`apps/api/app/core/config.py`)
+### Backend Configuration (`backend/app/core/config.py`)
 ```python
 # Database
 DATABASE_URL = "postgresql://thermal_user:thermal_password@localhost:5432/thermal_gait_db"
@@ -247,13 +247,13 @@ NEXT_PUBLIC_APP_NAME="Thermal Gait Surveillance"
 
 ### Backend Tests
 ```bash
-cd apps/api
+cd backend
 python -m pytest tests/ -v
 ```
 
 ### Frontend Tests
 ```bash
-cd apps/pwa
+cd frontend
 npm test
 ```
 
@@ -286,6 +286,5 @@ npm test
 - Advanced threat classification
 - Integration with security systems
 - Mobile app development
-
 
 
