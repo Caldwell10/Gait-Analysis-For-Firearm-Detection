@@ -8,17 +8,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ children, variant = 'primary', size = 'md', loading = false, className = '', disabled, ...props }, ref) => {
-    const baseClasses = 'inline-flex justify-center items-center border font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors';
-    
-    const variantClasses = {
-      primary: 'border-transparent text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500 disabled:bg-indigo-400',
-      secondary: 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50 focus:ring-indigo-500 disabled:bg-gray-100',
-      danger: 'border-transparent text-white bg-red-600 hover:bg-red-700 focus:ring-red-500 disabled:bg-red-400',
+    const baseClasses =
+      'inline-flex items-center justify-center rounded-2xl border font-semibold tracking-tight transition focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#8b5cf6]/70 focus:ring-offset-[var(--tg-color-bg)] heading-font';
+
+    const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
+      primary:
+        'border-transparent bg-gradient-to-r from-[#8b5cf6] via-[#6366f1] to-[#0ea5e9] text-white shadow-[0_14px_35px_rgba(99,102,241,0.28)] hover:shadow-[0_18px_40px_rgba(99,102,241,0.32)] hover:brightness-110 active:brightness-95 disabled:opacity-50',
+      secondary:
+        'border-[var(--tg-color-border)] bg-[var(--tg-color-surface-subtle)] text-[var(--tg-color-text)] hover:border-[var(--tg-color-border-strong)] hover:bg-white/15 disabled:opacity-50',
+      danger:
+        'border-transparent bg-rose-500/90 text-white hover:bg-rose-400 disabled:bg-rose-500/40',
     };
 
     const sizeClasses = {
-      sm: 'px-3 py-2 text-sm',
-      md: 'px-4 py-2 text-sm',
+      sm: 'px-3 py-2 text-xs',
+      md: 'px-5 py-2.5 text-sm',
       lg: 'px-6 py-3 text-base',
     };
 
@@ -42,7 +46,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading && (
           <svg
-            className="-ml-1 mr-3 h-5 w-5 animate-spin text-white"
+            className="-ml-1 mr-3 h-5 w-5 animate-spin text-current"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
