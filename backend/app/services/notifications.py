@@ -47,7 +47,15 @@ def notify_threat_detected(video: VideoRecord, analysis_results: dict) -> bool:
         "This alert was generated automatically by the Thermal Gait Surveillance system."
     ])
 
-    sent = send_email(subject, "\n".join(body_lines), recipients)
+    # Get GEI path if available
+    gei_path = analysis_results.get("gei_path")
+
+    sent = send_email(
+        subject=subject,
+        body="\n".join(body_lines),
+        recipients=recipients,
+        inline_image_path=gei_path
+    )
     if not sent:
         logger.warning("Threat alert email could not be delivered.")
     return sent

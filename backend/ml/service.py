@@ -5,6 +5,7 @@ Integrates ConvAutoencoder model with FastAPI for production inference
 import time
 import torch
 import numpy as np
+import cv2
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from sklearn.metrics.pairwise import euclidean_distances
@@ -109,12 +110,13 @@ class GaitAnalysisService:
             mahal_dist = torch.sqrt(torch.sum(diff @ self._latent_cov_inv * diff, dim=1))
             return float(mahal_dist.item())
 
-    def analyze_video(self, video_path: str) -> Dict:
+    def analyze_video(self, video_path: str, save_gei: bool = True) -> Dict:
         """
         Main analysis pipeline: Video → GEI → Anomaly Detection
 
         Args:
             video_path: Path to thermal video file
+            save_gei: Whether to save GEI image to disk (default: True)
 
         Returns:
             Dictionary with analysis results
@@ -134,6 +136,11 @@ class GaitAnalysisService:
                 clahe_clip=self.config['processing']['clahe_clip'],
                 clahe_grid=self.config['processing']['clahe_grid']
             )
+
+            # Save GEI image to disk for visualization
+            gei_path = None
+            if save_gei:
+                gei_path = self._save_gei_image(video_path, gei_array)
 
             # Step 2: Prepare tensor for model (add batch and channel dims)
             gei_tensor = torch.from_numpy(gei_array).float()
@@ -174,6 +181,7 @@ class GaitAnalysisService:
                     "image_size": self.config['data']['image_size']
                 },
                 "gei_generated": True,
+                "gei_path": gei_path,
                 "device": str(self.device)
             }
 
@@ -185,6 +193,45 @@ class GaitAnalysisService:
         except Exception as e:
             print(f"❌ Analysis failed: {str(e)}")
             raise RuntimeError(f"ML analysis failed: {str(e)}")
+
+    def _save_gei_image(self, video_path: str, gei_array: np.ndarray) -> Optional[str]:
+        """
+        Save GEI array as PNG image in the same directory as the video
+
+        Args:
+            video_path: Original video file path
+            gei_array: GEI numpy array (float32 in [0,1])
+
+        Returns:
+            Path to saved GEI image or None if save failed
+        """
+        try:
+            video_path_obj = Path(video_path)
+            video_dir = video_path_obj.parent
+
+            # Create gei subdirectory if it doesn't exist
+            gei_dir = video_dir / "gei"
+            gei_dir.mkdir(exist_ok=True)
+
+            # Convert GEI from [0,1] float to [0,255] uint8 for image saving
+            gei_image = (gei_array * 255).astype(np.uint8)
+
+            # Apply colormap for better visualization (turbo is good for thermal data)
+            gei_colored = cv2.applyColorMap(gei_image, cv2.COLORMAP_TURBO)
+
+            # Save both grayscale and colored versions
+            gei_gray_path = gei_dir / "gei_grayscale.png"
+            gei_color_path = gei_dir / "gei.png"
+
+            cv2.imwrite(str(gei_gray_path), gei_image)
+            cv2.imwrite(str(gei_color_path), gei_colored)
+
+            print(f"💾 GEI images saved: {gei_color_path}")
+            return str(gei_color_path)
+
+        except Exception as e:
+            print(f"⚠️ Failed to save GEI image: {e}")
+            return None
 
 
 # Global service instance

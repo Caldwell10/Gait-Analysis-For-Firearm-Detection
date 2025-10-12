@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..core.database import get_db
+from ..core.config import settings
 from .auth import get_current_user
 from ..core.file_handler import (
     validate_video_file,
@@ -697,6 +698,73 @@ async def stream_video(
     return create_streaming_response(
         file_path=file_path,
         range_header=range_header
+    )
+
+
+@router.get("/{video_id}/gei")
+async def get_video_gei(
+    video_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the GEI (Gait Energy Image) for a video
+
+    - **video_id**: UUID of the video
+    - Returns the GEI image file generated during ML analysis
+    - Users can only access their own videos (unless admin)
+    """
+    try:
+        video_uuid = uuid.UUID(video_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid video ID format"
+        )
+
+    # Check if video exists and user has access
+    if current_user.role == UserRole.ADMIN.value:
+        video = video_crud.get_video_by_id(db=db, video_id=video_uuid)
+    else:
+        video = video_crud.get_video_by_id_and_user(
+            db=db,
+            video_id=video_uuid,
+            user_id=current_user.id
+        )
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found or access denied"
+        )
+
+    # Check if GEI path exists in analysis results
+    gei_path = None
+    if video.analysis_results and 'gei_path' in video.analysis_results:
+        gei_path = Path(video.analysis_results['gei_path'])
+
+    # Fallback: try to find GEI in expected location
+    if not gei_path or not gei_path.exists():
+        video_dir = Path(settings.upload_base_dir) / "videos" / str(video.uploaded_by) / str(video.id)
+        gei_dir = video_dir / "gei"
+        potential_gei = gei_dir / "gei.png"
+
+        if potential_gei.exists():
+            gei_path = potential_gei
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="GEI image not found - analysis may not be complete yet"
+            )
+
+    # Return the GEI image
+    return FileResponse(
+        path=str(gei_path),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Disposition": f"inline; filename=gei_{video_id}.png"
+        }
     )
 
 
