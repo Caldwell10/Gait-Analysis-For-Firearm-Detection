@@ -349,6 +349,20 @@ async def oauth_login(provider: str, request: Request):
             detail=f"Unsupported OAuth provider: {provider}"
         )
 
+    # Validate provider configuration to avoid silent misconfiguration
+    if provider == 'google':
+        if not settings.google_client_id or not settings.google_client_secret:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+            )
+    elif provider == 'github':
+        if not settings.github_client_id or not settings.github_client_secret:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET."
+            )
+
     # Capture optional post-login redirect target (site-relative only)
     redirect_target = request.query_params.get('redirect')
     if redirect_target and redirect_target.startswith('/'):
