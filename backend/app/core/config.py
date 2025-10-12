@@ -1,6 +1,9 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import List
 import os
+
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -60,7 +63,8 @@ class Settings(BaseSettings):
     description: str = "Authentication and gait analysis API for thermal surveillance system"
     
     class Config:
-        env_file = ".env"
+        env_file = str(BASE_DIR / ".env")
+        env_file_encoding = "utf-8"
     
     @property
     def allowed_origins(self) -> List[str]:
