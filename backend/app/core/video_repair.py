@@ -6,6 +6,7 @@ import json
 import os
 import logging
 from pathlib import Path
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +152,85 @@ def repair_if_needed(video_path: str) -> tuple[bool, str, bool]:
     else:
         logger.error(f"Failed to repair video: {video_path}")
         return True, video_path, False
+
+
+def create_streamable_copy(
+    input_path: str,
+    output_path: Optional[str] = None
+) -> Tuple[bool, Optional[str], dict]:
+    """
+    Generate a browser-friendly MP4 copy for streaming.
+
+    Args:
+        input_path: Path to source video (retained for ML processing).
+        output_path: Optional explicit destination path.
+
+    Returns:
+        (success flag, output path, metadata dict)
+    """
+    source = Path(input_path)
+    if not source.exists():
+        logger.error(f"Streamable copy failed: source missing at {input_path}")
+        return False, None, {}
+
+    if output_path is None:
+        output_path = source.parent / "stream.mp4"
+    else:
+        output_path = Path(output_path)
+
+    try:
+        # Ensure directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            'ffmpeg',
+            '-y',  # overwrite
+            '-i', str(source),
+            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+            '-c:v', 'libx264',
+            '-profile:v', 'baseline',
+            '-level', '3.0',
+            '-pix_fmt', 'yuv420p',
+            '-preset', 'fast',
+            '-crf', '20',
+            '-movflags', '+faststart',
+            '-an',  # drop audio to avoid codec issues
+            str(output_path)
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"FFmpeg stream copy failed: {result.stderr}")
+            if output_path.exists():
+                output_path.unlink(missing_ok=True)
+            return False, None, {}
+
+        has_dimensions, stream_metadata = check_video_has_dimensions(str(output_path))
+        if not has_dimensions:
+            logger.error("Generated stream copy has invalid dimensions.")
+            output_path.unlink(missing_ok=True)
+            return False, None, {}
+
+        size_bytes = output_path.stat().st_size
+        stream_metadata.update({
+            "size_bytes": size_bytes,
+            "size_human": _format_file_size(size_bytes)
+        })
+        logger.info(f"Created streamable copy at {output_path} ({stream_metadata['width']}x{stream_metadata['height']})")
+        return True, str(output_path), stream_metadata
+    except FileNotFoundError:
+        logger.error("FFmpeg not found. Install ffmpeg to enable playback optimization.")
+    except Exception as exc:
+        logger.error(f"Unexpected error creating stream copy: {exc}")
+
+    if output_path and Path(output_path).exists():
+        Path(output_path).unlink(missing_ok=True)
+    return False, None, {}
+
+
+def _format_file_size(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes}B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f}KB"
+    return f"{size_bytes / (1024 * 1024):.1f}MB"

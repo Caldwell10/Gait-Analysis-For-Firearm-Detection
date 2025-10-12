@@ -11,9 +11,31 @@ let currentToken: string | null = null;
 
 export const setAuthToken = (token: string | null) => {
   currentToken = token;
+
+  if (typeof document !== 'undefined') {
+    if (token) {
+      document.cookie = `access_token=${encodeURIComponent(token)}; path=/; Max-Age=900; SameSite=Lax`;
+    } else {
+      document.cookie = 'access_token=; path=/; Max-Age=0; SameSite=Lax';
+    }
+  }
 };
 
-export const getAuthToken = () => currentToken;
+export const getAuthToken = () => {
+  if (currentToken) {
+    return currentToken;
+  }
+
+  if (typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|; )access_token=([^;]+)/);
+    if (match) {
+      currentToken = decodeURIComponent(match[1]);
+      return currentToken;
+    }
+  }
+
+  return null;
+};
 
 class ApiError extends Error {
   constructor(

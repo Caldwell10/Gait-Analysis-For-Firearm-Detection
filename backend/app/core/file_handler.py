@@ -127,7 +127,7 @@ def save_uploaded_file(
     user_id: str,
     video_id: str,
     original_filename: str
-) -> Tuple[str, Dict[str, Any]]:
+) -> Tuple[str, Dict[str, Any], str]:
     """
     Save uploaded file to disk with proper organization
 
@@ -174,7 +174,7 @@ def save_uploaded_file(
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
-        return str(file_path), metadata
+        return str(file_path), metadata, str(metadata_path)
 
     except Exception as e:
         # Clean up any partial files
@@ -351,13 +351,42 @@ def create_streaming_response(file_path: Path, range_header: Optional[str] = Non
     start = 0
     end = file_size - 1
 
+    range_start = None
+    range_end = None
+
     if range_header:
         range_match = range_header.replace('bytes=', '').split('-')
         if len(range_match) == 2:
             if range_match[0]:
-                start = int(range_match[0])
+                try:
+                    range_start = int(range_match[0])
+                except ValueError:
+                    raise HTTPException(status_code=416, detail="Invalid range start")
             if range_match[1]:
-                end = int(range_match[1])
+                try:
+                    range_end = int(range_match[1])
+                except ValueError:
+                    raise HTTPException(status_code=416, detail="Invalid range end")
+
+    if range_start is not None:
+        start = range_start
+
+    if range_end is not None:
+        end = range_end
+
+    # Validate range
+    if start >= file_size:
+        raise HTTPException(
+            status_code=416,
+            detail="Requested range not satisfiable",
+            headers={'Content-Range': f'bytes */{file_size}'}
+        )
+
+    if end >= file_size or range_end is None:
+        end = file_size - 1
+
+    if end < start:
+        end = file_size - 1
 
     content_length = end - start + 1
 

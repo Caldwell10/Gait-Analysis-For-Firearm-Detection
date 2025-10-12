@@ -1,5 +1,7 @@
 import uuid
+import json
 from typing import List, Optional
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -19,7 +21,8 @@ from ..core.file_handler import (
     get_storage_stats,
     cleanup_orphaned_files
 )
-from ..core.video_repair import repair_if_needed
+from ..core.video_repair import repair_if_needed, create_streamable_copy
+from ..services.notifications import notify_threat_detected
 from ..crud import video as video_crud
 from ..models.user import User, VideoRecord, UserRole
 from ..schemas.video import (
@@ -76,6 +79,12 @@ def process_video_analysis_sync(video_id: str):
         confidence = analysis_results['confidence_score']
         print(f"✅ Video {video_id} analysis completed: {threat_status} (confidence: {confidence})")
 
+        if analysis_results.get('threat_detected'):
+            try:
+                notify_threat_detected(video, analysis_results)
+            except Exception as notify_error:
+                print(f"⚠️ Failed to send threat notification: {notify_error}")
+
     except Exception as e:
         # Update status to failed
         try:
@@ -124,7 +133,7 @@ async def upload_video(
         video_id = uuid.uuid4()
 
         # Save file to disk
-        file_path, metadata = save_uploaded_file(
+        file_path, metadata, metadata_path = save_uploaded_file(
             file=file,
             user_id=str(current_user.id),
             video_id=str(video_id),
@@ -144,10 +153,27 @@ async def upload_video(
         if repaired:
             print(f"✅ Video {video_id} automatically repaired - corrupted metadata fixed")
 
+        # Generate streamable copy for browser playback
+        stream_success, stream_path, stream_metadata = create_streamable_copy(final_path)
+        stream_filename = None
+        if stream_success and stream_path:
+            stream_filename = Path(stream_path).name
+            metadata['stream_filename'] = stream_filename
+            metadata['stream_metadata'] = stream_metadata
+        else:
+            metadata['stream_filename'] = None
+
+        # Persist updated metadata
+        try:
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            print(f"⚠️ Failed to update metadata for video {video_id}: {e}")
+
         # Create database record
         video_record = video_crud.create_video_record(
             db=db,
-            filename=f"original{metadata['file_extension']}",
+            filename=stream_filename or f"original{metadata['file_extension']}",
             original_filename=file.filename,
             file_path=file_path,
             file_size=size_str,
@@ -579,8 +605,15 @@ async def download_video(
             detail="Video not found or access denied"
         )
 
-    # Get the actual file path
+    # Prefer optimized stream copy if available
     file_path = get_video_file_path(
+        user_id=str(video.uploaded_by),
+        video_id=str(video.id),
+        filename="stream"
+    )
+
+    if not file_path:
+        file_path = get_video_file_path(
         user_id=str(video.uploaded_by),
         video_id=str(video.id)
     )
@@ -636,11 +669,20 @@ async def stream_video(
             detail="Video not found or access denied"
         )
 
-    # Get the actual file path
+    # Get the actual file path (prefer streamable copy for browser playback)
     file_path = get_video_file_path(
         user_id=str(video.uploaded_by),
-        video_id=str(video.id)
+        video_id=str(video.id),
+        filename="stream"
     )
+
+    # Fallback to original if stream copy doesn't exist
+    if not file_path:
+        file_path = get_video_file_path(
+            user_id=str(video.uploaded_by),
+            video_id=str(video.id),
+            filename="original"
+        )
 
     if not file_path:
         raise HTTPException(

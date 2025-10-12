@@ -41,6 +41,21 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
 
+    # Allow token via query params for media streaming or pre-signed URLs
+    if not token:
+        token = request.query_params.get("token")
+
+    # Allow bearer token via Referer query parameter for CORS fetch fallback
+    if not token:
+        referer = request.headers.get("Referer")
+        if referer:
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(referer)
+            qs = parse_qs(parsed.query)
+            token_candidate = qs.get('token')
+            if token_candidate:
+                token = token_candidate[0]
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
