@@ -236,3 +236,8 @@ apps/api/ml/settings.*.json
 # Runtime configuration overrides
 config_override.*
 settings_override.*
+
+
+uploads
+
+.claude
