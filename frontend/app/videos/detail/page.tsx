@@ -87,6 +87,7 @@ export default function VideoDetailPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<VideoUpdateRequest>({});
+  const [showGEI, setShowGEI] = useState(false);
 
   const { user } = useSession();
   const router = useRouter();
@@ -426,9 +427,32 @@ export default function VideoDetailPage(): JSX.Element {
                           Threshold marker reflects detector boundary ({Number(video.analysis_results.threshold ?? 0.179).toFixed(3)})
                         </p>
                       </div>
-                      <Button variant="secondary" className="mt-3" onClick={handleDownloadMetrics}>
-                        Download metrics (JSON)
-                      </Button>
+                      <div className="mt-3 flex flex-col gap-2">
+                        <Button variant="secondary" onClick={handleDownloadMetrics}>
+                          Download metrics (JSON)
+                        </Button>
+                        <Button variant="secondary" onClick={() => setShowGEI(!showGEI)}>
+                          {showGEI ? 'Hide GEI visualization' : 'View GEI visualization'}
+                        </Button>
+                      </div>
+                      {showGEI && (
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <p className="text-xs uppercase tracking-[0.35em] text-slate-400 heading-font">Gait Energy Image</p>
+                          <p className="mt-2 text-xs text-slate-300 body-font">
+                            Visual representation of movement patterns analyzed by the ML model. Brighter areas indicate higher motion energy during gait cycle.
+                          </p>
+                          <div className="mt-4 rounded-xl overflow-hidden border border-white/10">
+                            <img
+                              src={`${API_BASE_URL}/api/videos/${video.id}/gei?token=${getAuthToken()}`}
+                              alt="Gait Energy Image"
+                              className="w-full"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="400"%3E%3Crect fill="%23334155" width="400" height="400"/%3E%3Ctext fill="%23cbd5e1" font-family="sans-serif" font-size="14" x="50%25" y="50%25" text-anchor="middle"%3EGEI not available%3C/text%3E%3C/svg%3E';
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </details>
                   </>
                 ) : (

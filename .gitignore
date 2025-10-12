@@ -146,16 +146,16 @@ tmp/
 temp/
 test_endpoints.py
 
-# System design documentation (untracked reference file)
+# System design documentation 
 SYSTEM_DESIGN.md
 
-# Lock files (keep package-lock.json but ignore others)
+# Lock files
 yarn.lock
 pnpm-lock.yaml
 
 CLAUDE.md
 
-# Video processing artifacts (for future ML integration)
+# Video processing artifacts 
 *.pt
 *.pth
 *.onnx
@@ -220,7 +220,7 @@ db_config.ini
 cookies.txt
 SPRINT3_ISSUES.md
 
-# Configuration Management (Sprint 3 hardcoded values cleanup)
+# Configuration Management 
 # Allow .env.example files but protect actual .env files
 *.env
 *.env.local
