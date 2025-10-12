@@ -74,7 +74,9 @@ export default function LoginPage() {
 
   const handleOAuthLogin = (provider: 'google' | 'github') => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    window.location.href = `${apiUrl}/auth/oauth/${provider}/login`;
+    const baseUrl = apiUrl.replace(/\/+$/, '');
+    const redirectParam = encodeURIComponent('/dashboard');
+    window.location.href = `${baseUrl}/auth/oauth/${provider}/login?redirect=${redirectParam}`;
   };
 
   return (

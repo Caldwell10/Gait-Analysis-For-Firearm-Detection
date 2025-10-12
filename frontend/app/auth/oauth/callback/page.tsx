@@ -13,6 +13,8 @@ export default function OAuthCallbackPage() {
 
   useEffect(() => {
     const token = searchParams.get('token');
+    const nextParam = searchParams.get('next');
+    const destination = nextParam && nextParam.startsWith('/') ? nextParam : '/dashboard';
 
     async function finalizeLogin() {
       if (!token) {
@@ -26,7 +28,7 @@ export default function OAuthCallbackPage() {
 
       try {
         await refreshSession();
-        router.replace('/dashboard');
+        router.replace(destination);
       } catch (error) {
         console.error('Failed to refresh session after OAuth login:', error);
         setStatusMessage('Could not load your session. Redirecting to sign-in...');

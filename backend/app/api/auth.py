@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -348,6 +349,13 @@ async def oauth_login(provider: str, request: Request):
             detail=f"Unsupported OAuth provider: {provider}"
         )
 
+    # Capture optional post-login redirect target (site-relative only)
+    redirect_target = request.query_params.get('redirect')
+    if redirect_target and redirect_target.startswith('/'):
+        request.session['oauth_redirect_next'] = redirect_target
+    else:
+        request.session.pop('oauth_redirect_next', None)
+
     # Redirect URI for OAuth callback
     redirect_uri = request.url_for('oauth_callback', provider=provider)
 
@@ -428,7 +436,15 @@ async def oauth_callback(provider: str, request: Request, db: Session = Depends(
         create_user_session(db, user.id, token_data["jti"], expires_at)
 
         # Prepare redirect response to frontend callback handler
-        redirect_url = f"{settings.frontend_oauth_redirect_url}?provider={provider}&token={access_token}"
+        next_path = request.session.pop('oauth_redirect_next', None)
+        query_params = {
+            "provider": provider,
+            "token": access_token
+        }
+        if isinstance(next_path, str) and next_path.startswith('/'):
+            query_params["next"] = next_path
+
+        redirect_url = f"{settings.frontend_oauth_redirect_url}?{urlencode(query_params)}"
         redirect_response = RedirectResponse(url=redirect_url, status_code=303)
 
         # Set cookie on redirect response for same-origin clients (optional in dev)
