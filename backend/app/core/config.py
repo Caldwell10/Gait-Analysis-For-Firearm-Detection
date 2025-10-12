@@ -1,5 +1,6 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings
+from pydantic import field_validator, Field
 from typing import List
 import os
 
@@ -23,6 +24,8 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
+    smtp_use_tls: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
+    smtp_sender: str = os.getenv("SMTP_SENDER", "")
 
     # Admin User Configuration
     first_admin_email: str = os.getenv("FIRST_ADMIN_EMAIL", "admin@yourdomain.com")
@@ -39,6 +42,8 @@ class Settings(BaseSettings):
     github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
     github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
     frontend_oauth_redirect_url: str = os.getenv("FRONTEND_OAUTH_REDIRECT_URL", "http://localhost:3000/auth/oauth/callback")
+    frontend_base_url: str = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    alert_email_recipients: List[str] = Field(default_factory=list)
 
     # File Upload Configuration
     upload_base_dir: str = os.getenv("UPLOAD_BASE_DIR", "uploads")
@@ -70,6 +75,12 @@ class Settings(BaseSettings):
     def allowed_origins(self) -> List[str]:
         """Convert comma-separated string to list."""
         return [origin.strip() for origin in self.allowed_origins_str.split(",")]
+
+    @field_validator("alert_email_recipients", mode="before")
+    def split_alert_recipients(cls, value):
+        if isinstance(value, str):
+            return [email.strip() for email in value.split(",") if email.strip()]
+        return value
 
 
 settings = Settings()

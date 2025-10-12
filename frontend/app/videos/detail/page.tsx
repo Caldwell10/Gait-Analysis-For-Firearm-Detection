@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Button from '../../../src/components/ui/Button';
 import AnalysisProgress from '../../../src/components/ui/AnalysisProgress';
-import { api, ApiError, VideoMetadata, VideoUpdateRequest } from '../../../src/lib/api';
+import { api, ApiError, VideoMetadata, VideoUpdateRequest, getAuthToken } from '../../../src/lib/api';
 import { useSession } from '../../../src/lib/session';
 
 type StatusKey = 'pending' | 'processing' | 'completed' | 'failed';
@@ -92,7 +92,6 @@ export default function VideoDetailPage(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const videoId = searchParams.get('id');
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!user || !videoId) return;
@@ -102,7 +101,12 @@ export default function VideoDetailPage(): JSX.Element {
   const streamSrc = useMemo(() => {
     if (!videoId) return null;
     const cacheBust = video?.updated_at ? new Date(video.updated_at).getTime() : Date.now();
-    return `${API_BASE_URL}/api/videos/${videoId}/stream?b=${cacheBust}`;
+    const params = new URLSearchParams({ b: String(cacheBust) });
+    const token = getAuthToken();
+    if (token) {
+      params.set('token', token);
+    }
+    return `${API_BASE_URL}/api/videos/${videoId}/stream?${params.toString()}`;
   }, [videoId, video?.updated_at]);
 
   const threatMetrics = useMemo(() => {
@@ -228,7 +232,7 @@ export default function VideoDetailPage(): JSX.Element {
 
   return (
     <div className="relative min-h-screen bg-slate-950 text-slate-100">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(139,92,246,0.12),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(16,185,129,0.1),_transparent_60%)]" />
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(139,92,246,0.12),_transparent_55%),radial-gradient(circle_at_bottom,_rgba(16,185,129,0.1),_transparent_60%)]" />
 
       <div className="mx-auto max-w-6xl px-6 py-12 lg:px-8">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -291,23 +295,7 @@ export default function VideoDetailPage(): JSX.Element {
 
                 <AnalysisProgress status={video.analysis_status as StatusKey} size="sm" />
 
-                <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/40">
-                  {streamSrc ? (
-                    <video
-                      key={streamSrc}
-                      ref={videoRef}
-                      className="aspect-video w-full"
-                      src={streamSrc}
-                      controls
-                      controlsList="nodownload"
-                      playsInline
-                    />
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center text-sm text-slate-300">
-                      Video stream unavailable.
-                    </div>
-                  )}
-                </div>
+                <VideoPlayer streamSrc={streamSrc} />
 
                 <div className="glass-subtle p-5">
                   <h3 className="text-sm font-semibold text-white heading-font">Recording details</h3>
@@ -478,6 +466,106 @@ export default function VideoDetailPage(): JSX.Element {
           </aside>
         </main>
       </div>
+    </div>
+  );
+}
+
+function VideoPlayer({ streamSrc }: { streamSrc: string | null }) {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let abortController = new AbortController();
+    let url: string | null = null;
+
+    async function load() {
+      if (!streamSrc) {
+        setStatus('idle');
+        setErrorMessage(null);
+        setObjectUrl(null);
+        return;
+      }
+
+      try {
+        setStatus('loading');
+        setErrorMessage(null);
+
+        const response = await fetch(streamSrc, {
+          method: 'GET',
+          signal: abortController.signal,
+          mode: 'cors',
+          credentials: 'omit',
+          headers: {
+            Accept: 'video/mp4',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Stream request failed (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        url = URL.createObjectURL(blob);
+        setObjectUrl(url);
+        setStatus('ready');
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') return;
+        console.error('Video fetch error:', error);
+        setStatus('error');
+        setErrorMessage(
+          error instanceof Error ? error.message : 'Could not load the video stream.'
+        );
+        setObjectUrl(null);
+      }
+    }
+
+    load();
+
+    return () => {
+      abortController.abort();
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [streamSrc]);
+
+  return (
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-black">
+      {objectUrl ? (
+        <video
+          key={objectUrl}
+          className="aspect-video w-full bg-black object-contain"
+          src={objectUrl}
+          controls
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        <div className="flex aspect-video items-center justify-center text-sm text-slate-300">
+          {status === 'loading' ? 'Loading video…' : 'Video stream unavailable.'}
+        </div>
+      )}
+
+      {status === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <div className="flex flex-col items-center gap-3 text-sm text-slate-200">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-violet-400" />
+            <span>Loading video…</span>
+          </div>
+        </div>
+      )}
+
+      {(status === 'error' || status === 'idle') && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 p-6 text-center text-sm text-rose-200">
+          <p>{errorMessage ?? 'Video stream unavailable.'}</p>
+          {streamSrc && (
+            <Button variant="secondary" onClick={() => window.open(streamSrc, '_blank')}>
+              Open raw stream
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
