@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any, Tuple
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 import magic
+import cv2
+import numpy as np
 from .config import settings
 
 # File validation settings
@@ -28,6 +30,94 @@ UPLOAD_BASE_DIR = Path(settings.upload_base_dir)
 class FileValidationError(Exception):
     """Custom exception for file validation errors"""
     pass
+
+
+def validate_thermal_video(file_path: str, *, sample_frames: int = 20) -> None:
+    """
+    Ensure uploaded video exhibits thermal (pseudo-grayscale) characteristics.
+
+    Args:
+        file_path: Path to uploaded video on disk.
+        sample_frames: Number of frames to inspect.
+
+    Raises:
+        FileValidationError: If video cannot be read or appears to be regular RGB footage.
+    """
+    cap = cv2.VideoCapture(file_path)
+    if not cap.isOpened():
+        cap.release()
+        raise FileValidationError("Uploaded video could not be opened for validation.")
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_count = frame_count if frame_count > 0 else -1
+    step = max((frame_count // sample_frames) if frame_count > 0 else 1, 1)
+
+    checked = 0
+    non_thermal = 0
+
+    try:
+        frame_index = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_index % step != 0:
+                frame_index += 1
+                continue
+
+            checked += 1
+
+            # Single-channel images are considered thermal
+            if frame.ndim == 2 or (frame.ndim == 3 and frame.shape[2] == 1):
+                frame_index += 1
+                if checked >= sample_frames:
+                    break
+                continue
+
+            if frame.ndim == 3 and frame.shape[2] >= 3:
+                frame_bgr = frame if frame.shape[2] == 3 else cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                if frame_bgr.size > 320 * 240 * frame_bgr.shape[2]:
+                    frame_bgr = cv2.resize(frame_bgr, (320, 240))
+
+                frame_float = frame_bgr.astype(np.float32)
+                hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+                saturation = hsv[..., 1].astype(np.float32) / 255.0
+
+                channel_spread = np.max(frame_float, axis=2) - np.min(frame_float, axis=2)
+                colorful_ratio = float(np.mean(channel_spread > 12.0))
+                mean_channel_spread = float(np.mean(channel_spread))
+                mean_saturation = float(np.mean(saturation))
+
+                gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+                mean_diff = float(np.mean(np.abs(frame_float - gray[..., None])))
+
+                if (
+                    colorful_ratio > 0.08
+                    or mean_channel_spread > 9.0
+                    or mean_saturation > 0.15
+                    or mean_diff > 12.0
+                ):
+                    non_thermal += 1
+                    if non_thermal >= max(1, checked // 4 + 1):
+                        break
+
+            frame_index += 1
+            if checked >= sample_frames:
+                break
+    finally:
+        cap.release()
+
+    if checked == 0:
+        raise FileValidationError("Uploaded video did not contain any readable frames.")
+
+    # Require only a small portion of frames to violate thermal expectations
+    rejection_threshold = max(1, checked // 4 + 1)
+    if non_thermal >= rejection_threshold:
+        raise FileValidationError(
+            "Uploaded video appears to be standard color footage. "
+            "Please provide thermal imagery captured by a thermal camera."
+        )
 
 
 def validate_video_file(file: UploadFile) -> None:

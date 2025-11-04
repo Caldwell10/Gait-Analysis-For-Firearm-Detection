@@ -20,7 +20,8 @@ from ..core.file_handler import (
     create_streaming_response,
     get_file_info,
     get_storage_stats,
-    cleanup_orphaned_files
+    cleanup_orphaned_files,
+    validate_thermal_video
 )
 from ..core.video_repair import repair_if_needed, create_streamable_copy
 from ..services.notifications import notify_threat_detected
@@ -153,6 +154,22 @@ async def upload_video(
 
         if repaired:
             print(f"✅ Video {video_id} automatically repaired - corrupted metadata fixed")
+
+        # Ensure the footage resembles thermal imagery before continuing
+        try:
+            validate_thermal_video(final_path)
+        except FileValidationError as e:
+            delete_video_files(str(current_user.id), str(video_id))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except Exception as e:
+            delete_video_files(str(current_user.id), str(video_id))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not validate thermal footage. Please try another recording."
+            ) from e
 
         # Generate streamable copy for browser playback
         stream_success, stream_path, stream_metadata = create_streamable_copy(final_path)
