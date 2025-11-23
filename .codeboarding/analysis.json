@@ -1,0 +1,285 @@
+{
+  "description": "The Gait Analysis For Firearm Detection project employs a microservices-oriented architecture, centered around a Frontend Application (PWA) that serves as the primary user interface. This PWA interacts with a Backend API Gateway (FastAPI), which acts as the central orchestrator for all backend operations. User authentication is handled by a dedicated Authentication Service, which securely manages user credentials and authorization, persisting user data in the Database (PostgreSQL). Video files uploaded through the frontend are managed by the File Storage Service. Once stored, the Video Processing Service prepares these videos for analysis, subsequently forwarding them to the Machine Learning Service for gait analysis and firearm detection. All processed data and analysis results are then stored and retrieved from the Database (PostgreSQL), ensuring data persistence and integrity across the system. This modular design promotes scalability, maintainability, and clear separation of concerns, making it suitable for both documentation and visual diagram generation.",
+  "components": [
+    {
+      "name": "Frontend Application (PWA)",
+      "description": "The user-facing interface for interacting with the system, handling user authentication, video uploads, and displaying analysis results.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "frontend/app/page.tsx",
+          "reference_file": "frontend/app/page.tsx",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "frontend/app/videos/page.tsx",
+          "reference_file": "frontend/app/videos/page.tsx",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "frontend/app/auth/login/page.tsx",
+          "reference_file": "frontend/app/auth/login/page.tsx",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "frontend/app/auth/signup/page.tsx",
+          "reference_file": "frontend/app/auth/signup/page.tsx",
+          "reference_start_line": null,
+          "reference_end_line": null
+        }
+      ],
+      "assigned_files": [
+        "frontend/app/page.tsx",
+        "frontend/app/videos/page.tsx",
+        "frontend/app/auth/login/page.tsx",
+        "frontend/app/auth/signup/page.tsx",
+        "frontend/next-env.d.ts",
+        "frontend/src/lib/api.ts",
+        "frontend/app/layout.tsx",
+        "frontend/app/auth/oauth/callback/page.tsx",
+        "frontend/app/auth/forgot-password/page.tsx",
+        "frontend/app/auth/reset-password/page.tsx",
+        "frontend/app/dashboard/page.tsx",
+        "frontend/app/videos/detail/page.tsx",
+        "frontend/app/videos/list/page.tsx",
+        "frontend/src/components/AuthGuard.tsx",
+        "frontend/src/components/ui/PasswordField.tsx",
+        "frontend/src/components/ui/AuthLayout.tsx",
+        "frontend/src/components/ui/AnalysisProgress.tsx",
+        "frontend/src/components/ui/TextField.tsx",
+        "frontend/src/components/ui/FormError.tsx",
+        "frontend/src/components/ui/Button.tsx",
+        "frontend/src/components/ui/OAuthButtons.tsx",
+        "frontend/src/components/charts/MetricTrendChart.tsx",
+        "frontend/src/lib/session.tsx",
+        "frontend/tailwind.config.js",
+        "frontend/next.config.js",
+        "frontend/postcss.config.js"
+      ],
+      "can_expand": true
+    },
+    {
+      "name": "Authentication Service",
+      "description": "Manages user authentication and authorization processes, including user registration, login, and JWT token handling.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "backend.app.core.security",
+          "reference_file": "backend/app/core/security.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "backend.app.api.auth",
+          "reference_file": "backend/app/api/auth.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        }
+      ],
+      "assigned_files": [
+        "backend/app/core/security.py",
+        "backend/app/api/auth.py",
+        "backend/app/core/oauth.py",
+        "backend/app/schemas/auth.py"
+      ],
+      "can_expand": true
+    },
+    {
+      "name": "Backend API Gateway (FastAPI)",
+      "description": "The central application logic layer, acting as the primary interface for the Frontend Application. It orchestrates calls to other backend services, manages data flow, and interacts with the database and file storage.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "backend.app.main",
+          "reference_file": "backend/app/main.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "backend.app.api.analysis",
+          "reference_file": "backend/app/api/analysis.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "backend.app.api.videos",
+          "reference_file": "backend/app/api/videos.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        }
+      ],
+      "assigned_files": [
+        "backend/app/main.py",
+        "backend/app/api/analysis.py",
+        "backend/app/api/videos.py",
+        "backend/run_server.py",
+        "backend/app/core/config.py"
+      ],
+      "can_expand": true
+    },
+    {
+      "name": "File Storage Service",
+      "description": "Responsible for the secure storage and retrieval of raw and processed video files.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "backend.app.core.file_handler",
+          "reference_file": "backend/app/core/file_handler.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        }
+      ],
+      "assigned_files": [
+        "backend/app/core/file_handler.py"
+      ],
+      "can_expand": false
+    },
+    {
+      "name": "Video Processing Service",
+      "description": "Pre-processes raw video files to prepare them for machine learning analysis, utilizing libraries like OpenCV and FFmpeg.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "backend.app.services.video_processing",
+          "reference_file": "backend/app/services/video_processing.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        }
+      ],
+      "assigned_files": [
+        "backend/app/services/video_processing.py",
+        "backend/app/core/video_repair.py"
+      ],
+      "can_expand": false
+    },
+    {
+      "name": "Machine Learning Service",
+      "description": "Executes the core machine learning models for gait analysis and firearm detection on processed video data.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "backend.app.services.ml_analysis",
+          "reference_file": "YOUR_FILE_PATH",
+          "reference_start_line": 1,
+          "reference_end_line": 10
+        }
+      ],
+      "assigned_files": [
+        "backend/app/services/ml_analysis",
+        "backend/ml/service.py",
+        "backend/ml/processor.py",
+        "backend/ml/model.py",
+        "backend/ml/utils.py"
+      ],
+      "can_expand": true
+    },
+    {
+      "name": "Database (PostgreSQL)",
+      "description": "The persistent data store for all application data, including user information, video metadata, and machine learning analysis results, managed via SQLAlchemy ORM.",
+      "referenced_source_code": [
+        {
+          "qualified_name": "backend.app.core.database",
+          "reference_file": "backend/app/core/database.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "backend.app.models.user",
+          "reference_file": "backend/app/models/user.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "backend.app.schemas.analysis",
+          "reference_file": "backend/app/schemas/analysis.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        },
+        {
+          "qualified_name": "backend.app.crud.analysis",
+          "reference_file": "backend/app/crud/analysis.py",
+          "reference_start_line": null,
+          "reference_end_line": null
+        }
+      ],
+      "assigned_files": [
+        "backend/app/core/database.py",
+        "backend/app/models/user.py",
+        "backend/app/schemas/analysis.py",
+        "backend/app/crud/analysis.py",
+        "backend/app/schemas/video.py",
+        "backend/app/crud/user.py",
+        "backend/app/crud/video.py",
+        "backend/alembic/env.py",
+        "backend/alembic/versions/adb7ee20c2cd_add_video_records_and_gait_analysis_.py",
+        "backend/alembic/versions/5c258263c971_remove_totp_fields_and_add_video_.py",
+        "backend/alembic/versions/b3f9a1c4d5e6_add_oauth_fields_to_user_model.py"
+      ],
+      "can_expand": true
+    },
+    {
+      "name": "Unclassified",
+      "description": "Component for all unclassified files and utility functions (Utility functions/External Libraries/Dependencies)",
+      "referenced_source_code": [],
+      "assigned_files": [
+        "backend/__init__.py",
+        "backend/app/__init__.py",
+        "backend/app/core/email_utils.py",
+        "backend/app/models/__init__.py",
+        "backend/app/crud/__init__.py",
+        "backend/app/services/notifications.py",
+        "backend/ml/__init__.py"
+      ],
+      "can_expand": false
+    }
+  ],
+  "components_relations": [
+    {
+      "relation": "initiates user authentication with",
+      "src_name": "Frontend Application (PWA)",
+      "dst_name": "Authentication Service"
+    },
+    {
+      "relation": "sends video data to and retrieves analysis results from",
+      "src_name": "Frontend Application (PWA)",
+      "dst_name": "Backend API Gateway (FastAPI)"
+    },
+    {
+      "relation": "uses for user authorization",
+      "src_name": "Backend API Gateway (FastAPI)",
+      "dst_name": "Authentication Service"
+    },
+    {
+      "relation": "interacts with for user data management",
+      "src_name": "Authentication Service",
+      "dst_name": "Database (PostgreSQL)"
+    },
+    {
+      "relation": "sends raw video files to for storage",
+      "src_name": "Backend API Gateway (FastAPI)",
+      "dst_name": "File Storage Service"
+    },
+    {
+      "relation": "triggers to start video pre-processing",
+      "src_name": "Backend API Gateway (FastAPI)",
+      "dst_name": "Video Processing Service"
+    },
+    {
+      "relation": "provides raw video files to",
+      "src_name": "File Storage Service",
+      "dst_name": "Video Processing Service"
+    },
+    {
+      "relation": "sends processed video data to",
+      "src_name": "Video Processing Service",
+      "dst_name": "Machine Learning Service"
+    },
+    {
+      "relation": "stores analysis results in",
+      "src_name": "Machine Learning Service",
+      "dst_name": "Database (PostgreSQL)"
+    },
+    {
+      "relation": "queries for video metadata and analysis results",
+      "src_name": "Backend API Gateway (FastAPI)",
+      "dst_name": "Database (PostgreSQL)"
+    }
+  ]
+}

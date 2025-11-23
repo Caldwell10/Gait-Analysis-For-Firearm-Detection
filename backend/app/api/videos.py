@@ -1,5 +1,6 @@
 import uuid
 import json
+import logging
 from typing import List, Optional
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request, BackgroundTasks
@@ -20,7 +21,8 @@ from ..core.file_handler import (
     create_streaming_response,
     get_file_info,
     get_storage_stats,
-    cleanup_orphaned_files
+    cleanup_orphaned_files,
+    validate_thermal_video
 )
 from ..core.video_repair import repair_if_needed, create_streamable_copy
 from ..services.notifications import notify_threat_detected
@@ -34,6 +36,7 @@ from ..schemas.video import (
     VideoAnalysisStatusUpdate
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/videos", tags=["videos"])
 
 
@@ -154,6 +157,22 @@ async def upload_video(
         if repaired:
             print(f"✅ Video {video_id} automatically repaired - corrupted metadata fixed")
 
+        # Ensure the footage resembles thermal imagery before continuing
+        try:
+            validate_thermal_video(final_path)
+        except FileValidationError as e:
+            delete_video_files(str(current_user.id), str(video_id))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except Exception as e:
+            delete_video_files(str(current_user.id), str(video_id))
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not validate thermal footage. Please try another recording."
+            ) from e
+
         # Generate streamable copy for browser playback
         stream_success, stream_path, stream_metadata = create_streamable_copy(final_path)
         stream_filename = None
@@ -199,13 +218,17 @@ async def upload_video(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except HTTPException as http_exc:
+        # Preserve intended HTTP errors (e.g., 400 from validation)
+        raise http_exc
     except Exception as e:
         # Clean up any partial uploads
         try:
             delete_video_files(str(current_user.id), str(video_id))
         except:
             pass
-
+        # Log the root cause so we can diagnose 500s quickly
+        logger.exception("Upload failed for video %s", video_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload video: {str(e)}"

@@ -3,11 +3,14 @@ import uuid
 import shutil
 import json
 import mimetypes
+import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 import magic
+import cv2
+import numpy as np
 from .config import settings
 
 # File validation settings
@@ -24,10 +27,182 @@ MAX_FILE_SIZE = settings.max_file_size_mb * 1024 * 1024  # Convert MB to bytes
 # Base upload directory
 UPLOAD_BASE_DIR = Path(settings.upload_base_dir)
 
+logger = logging.getLogger(__name__)
+STRICT_THERMAL_VALIDATION = os.getenv("STRICT_THERMAL_VALIDATION", "false").lower() == "true"
+
 
 class FileValidationError(Exception):
     """Custom exception for file validation errors"""
     pass
+
+
+def validate_thermal_video(file_path: str, *, sample_frames: int = 12) -> None:
+    """
+    Ensure uploaded video exhibits thermal (pseudo-grayscale) characteristics.
+
+    Args:
+        file_path: Path to uploaded video on disk.
+        sample_frames: Number of frames to inspect.
+
+    Raises:
+        FileValidationError: If video cannot be read or appears to be regular RGB footage.
+    """
+    logger.info("Thermal validation start: %s", file_path)
+    cap = cv2.VideoCapture(file_path)
+    if not cap.isOpened():
+        cap.release()
+        raise FileValidationError("Uploaded video could not be opened for validation.")
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_count = frame_count if frame_count > 0 else -1
+    step = max((frame_count // sample_frames) if frame_count > 0 else 1, 1)
+
+    checked = 0
+    non_thermal = 0
+    thermal_like = 0
+    sample_debug: List[dict] = []
+    max_colorfulness = 0.0
+    sum_colorfulness = 0.0
+    sum_saturation = 0.0
+    frames_with_metrics = 0
+
+    try:
+        frame_index = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            if frame_index % step != 0:
+                frame_index += 1
+                continue
+
+            checked += 1
+
+            # Single-channel images are considered thermal
+            if frame.ndim == 2 or (frame.ndim == 3 and frame.shape[2] == 1):
+                frame_index += 1
+                if checked >= sample_frames:
+                    break
+                continue
+
+            if frame.ndim == 3 and frame.shape[2] >= 3:
+                frame_bgr = frame if frame.shape[2] == 3 else cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                if frame_bgr.size > 320 * 240 * frame_bgr.shape[2]:
+                    frame_bgr = cv2.resize(frame_bgr, (320, 240))
+
+                frame_float = frame_bgr.astype(np.float32)
+                hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
+                saturation = hsv[..., 1].astype(np.float32) / 255.0
+                hue = hsv[..., 0].astype(np.float32) / 180.0
+
+                channel_spread = np.max(frame_float, axis=2) - np.min(frame_float, axis=2)
+                colorful_ratio = float(np.mean(channel_spread > 12.0))
+                mean_channel_spread = float(np.mean(channel_spread))
+                mean_saturation = float(np.mean(saturation))
+                hue_std = float(np.std(hue))
+
+                gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+                mean_diff = float(np.mean(np.abs(frame_float - gray[..., None])))
+
+                # Hasler-Süsstrunk colorfulness metric helps catch truly RGB footage
+                rg = frame_float[..., 2] - frame_float[..., 1]
+                yb = 0.5 * (frame_float[..., 2] + frame_float[..., 1]) - frame_float[..., 0]
+                colorfulness = float(
+                    np.sqrt(np.var(rg) + np.var(yb))
+                    + 0.3 * np.sqrt(np.mean(rg) ** 2 + np.mean(yb) ** 2)
+                )
+
+                frames_with_metrics += 1
+                max_colorfulness = max(max_colorfulness, colorfulness)
+                sum_colorfulness += colorfulness
+                sum_saturation += mean_saturation
+
+                looks_thermal = (
+                    (hue_std < 0.38 and colorful_ratio < 0.78 and mean_saturation < 0.94 and colorfulness < 140.0)
+                    or (mean_saturation < 0.6 and colorful_ratio < 0.5 and mean_channel_spread < 28.0 and mean_diff < 32.0 and colorfulness < 75.0)
+                )
+
+                clearly_rgb = (
+                    hue_std > 0.45
+                    and (
+                        mean_saturation > 0.85
+                        or colorful_ratio > 0.82
+                        or mean_channel_spread > 44.0
+                        or mean_diff > 48.0
+                        or colorfulness > 150.0
+                    )
+                )
+
+                if looks_thermal:
+                    thermal_like += 1
+                    decision = "thermal"
+                elif clearly_rgb:
+                    non_thermal += 1
+                    decision = "rgb"
+                    if non_thermal >= max(1, checked // 2 + 1):
+                        break
+                else:
+                    # Ambiguous frames lean thermal by default to avoid false rejects
+                    thermal_like += 1
+                    decision = "ambiguous->thermal"
+
+                # keep a few samples for debugging
+                if len(sample_debug) < 10:
+                    sample_debug.append({
+                        "frame": frame_index,
+                        "hue_std": round(hue_std, 4),
+                        "sat_mean": round(mean_saturation, 4),
+                        "colorful_ratio": round(colorful_ratio, 4),
+                        "channel_spread": round(mean_channel_spread, 2),
+                        "mean_diff": round(mean_diff, 2),
+                        "colorfulness": round(colorfulness, 2),
+                        "decision": decision
+                    })
+
+            frame_index += 1
+            if checked >= sample_frames:
+                break
+    finally:
+        cap.release()
+
+    if checked == 0:
+        raise FileValidationError("Uploaded video did not contain any readable frames.")
+
+    if checked == 0:
+        raise FileValidationError("Uploaded video did not contain any readable frames.")
+
+    non_thermal_ratio = non_thermal / checked
+    thermal_ratio = thermal_like / checked
+
+    avg_colorfulness = (sum_colorfulness / frames_with_metrics) if frames_with_metrics else 0.0
+    avg_saturation = (sum_saturation / frames_with_metrics) if frames_with_metrics else 0.0
+
+    # Only reject when the vast majority is clearly RGB and few look thermal
+    logger.warning(
+        "Thermal validation summary: checked=%d thermal_like=%d non_thermal=%d "
+        "thermal_ratio=%.3f non_thermal_ratio=%.3f avg_colorfulness=%.2f "
+        "avg_saturation=%.3f max_colorfulness=%.2f samples=%s",
+        checked, thermal_like, non_thermal, thermal_ratio, non_thermal_ratio,
+        avg_colorfulness, avg_saturation, max_colorfulness, sample_debug
+    )
+
+    # Hard block obviously RGB footage even in non-strict mode (very colorful + almost all frames non-thermal)
+    if non_thermal_ratio >= 0.995 and avg_colorfulness > 80.0 and avg_saturation > 0.6 and max_colorfulness > 150.0:
+        raise FileValidationError(
+            "Uploaded video appears to be standard color footage. "
+            "Please provide thermal imagery captured by a thermal camera."
+        )
+
+    # Soft gate: only block when almost everything looks RGB and very little looks thermal
+    if non_thermal_ratio >= 0.995 and thermal_ratio < 0.05:
+        msg = (
+            "Uploaded video appears to be standard color footage. "
+            "Please provide thermal imagery captured by a thermal camera."
+        )
+        if STRICT_THERMAL_VALIDATION:
+            raise FileValidationError(msg)
+        logger.warning("Thermal validation non-strict mode: allowing file. %s", msg)
 
 
 def validate_video_file(file: UploadFile) -> None:
