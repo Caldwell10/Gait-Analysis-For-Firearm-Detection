@@ -1,5 +1,6 @@
 import uuid
 import json
+import logging
 from typing import List, Optional
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status, Request, BackgroundTasks
@@ -35,6 +36,7 @@ from ..schemas.video import (
     VideoAnalysisStatusUpdate
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/videos", tags=["videos"])
 
 
@@ -216,13 +218,17 @@ async def upload_video(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except HTTPException as http_exc:
+        # Preserve intended HTTP errors (e.g., 400 from validation)
+        raise http_exc
     except Exception as e:
         # Clean up any partial uploads
         try:
             delete_video_files(str(current_user.id), str(video_id))
         except:
             pass
-
+        # Log the root cause so we can diagnose 500s quickly
+        logger.exception("Upload failed for video %s", video_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload video: {str(e)}"
