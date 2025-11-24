@@ -29,6 +29,7 @@ UPLOAD_BASE_DIR = Path(settings.upload_base_dir)
 
 logger = logging.getLogger(__name__)
 STRICT_THERMAL_VALIDATION = os.getenv("STRICT_THERMAL_VALIDATION", "false").lower() == "true"
+THERMAL_VALIDATION_THRESHOLD = float(os.getenv("THERMAL_VALIDATION_THRESHOLD", "0.6"))
 
 
 class FileValidationError(Exception):
@@ -60,6 +61,7 @@ def validate_thermal_video(file_path: str, *, sample_frames: int = 12) -> None:
     checked = 0
     non_thermal = 0
     thermal_like = 0
+    uncertain = 0
     sample_debug: List[dict] = []
     max_colorfulness = 0.0
     sum_colorfulness = 0.0
@@ -113,24 +115,54 @@ def validate_thermal_video(file_path: str, *, sample_frames: int = 12) -> None:
                     + 0.3 * np.sqrt(np.mean(rg) ** 2 + np.mean(yb) ** 2)
                 )
 
+                # Detect false-color thermal palettes (ironbow, rainbow, etc.)
+                # Key characteristics:
+                # 1. Thermal colormaps use warm-to-cool gradient (purple->blue->yellow->orange->red)
+                # 2. Very limited unique saturation values (colormap is predefined)
+                # 3. Hue values cluster in specific thermal colormap ranges
+                hue_values = hsv[..., 0].flatten()
+                sat_values = hsv[..., 1].flatten()
+
+                # Check for thermal colormap characteristics
+                unique_hues = len(np.unique(np.round(hue_values / 5) * 5))  # 5-degree bins
+                unique_sats = len(np.unique(np.round(sat_values / 10) * 10))  # 10-unit bins
+
+                # Thermal colormaps have very limited saturation variety (predefined palette)
+                # and hues cluster in warm/cool ranges
+                hue_histogram = np.histogram(hue_values, bins=18, range=(0, 180))[0]
+                dominant_hue_bins = np.sum(hue_histogram > (len(hue_values) * 0.05))  # Bins with >5% pixels
+
+                # False-color thermal: limited saturation variety + clustered hues + high saturation overall
+                is_false_color_thermal = (
+                    unique_sats < 15  # Very limited saturation values (colormap)
+                    and dominant_hue_bins <= 6  # Colors cluster in few hue ranges
+                    and mean_saturation > 0.4  # Thermal colormaps are saturated
+                    and hue_std < 0.25  # Hues cluster together
+                )
+
                 frames_with_metrics += 1
                 max_colorfulness = max(max_colorfulness, colorfulness)
                 sum_colorfulness += colorfulness
                 sum_saturation += mean_saturation
 
+                # Thermal detection - grayscale OR confirmed false-color thermal
                 looks_thermal = (
-                    (hue_std < 0.38 and colorful_ratio < 0.78 and mean_saturation < 0.94 and colorfulness < 140.0)
-                    or (mean_saturation < 0.6 and colorful_ratio < 0.5 and mean_channel_spread < 28.0 and mean_diff < 32.0 and colorfulness < 75.0)
+                    # Grayscale thermal (low saturation, low colorfulness)
+                    (mean_saturation < 0.20 and colorfulness < 30.0 and mean_channel_spread < 12.0)
+                    or (mean_saturation < 0.25 and colorfulness < 40.0 and hue_std < 0.10 and mean_diff < 10.0)
+                    # Confirmed false-color thermal palette
+                    or is_false_color_thermal
                 )
 
+                # RGB detection - natural scenes have varied saturation and wide hue distribution
+                # Key: RGB has many different saturation levels (shadows, highlights, objects)
                 clearly_rgb = (
-                    hue_std > 0.45
+                    not is_false_color_thermal
+                    and unique_sats > 20  # Natural scenes have varied saturation
                     and (
-                        mean_saturation > 0.85
-                        or colorful_ratio > 0.82
-                        or mean_channel_spread > 44.0
-                        or mean_diff > 48.0
-                        or colorfulness > 150.0
+                        (mean_saturation > 0.25 and colorfulness > 40.0)
+                        or (colorful_ratio > 0.35 and mean_channel_spread > 20.0)
+                        or (dominant_hue_bins > 8)  # Colors spread across many hue ranges
                     )
                 )
 
@@ -143,9 +175,9 @@ def validate_thermal_video(file_path: str, *, sample_frames: int = 12) -> None:
                     if non_thermal >= max(1, checked // 2 + 1):
                         break
                 else:
-                    # Ambiguous frames lean thermal by default to avoid false rejects
-                    thermal_like += 1
-                    decision = "ambiguous->thermal"
+                    # Ambiguous frames are tracked separately for balanced scoring
+                    uncertain += 1
+                    decision = "uncertain"
 
                 # keep a few samples for debugging
                 if len(sample_debug) < 10:
@@ -157,6 +189,10 @@ def validate_thermal_video(file_path: str, *, sample_frames: int = 12) -> None:
                         "channel_spread": round(mean_channel_spread, 2),
                         "mean_diff": round(mean_diff, 2),
                         "colorfulness": round(colorfulness, 2),
+                        "unique_hues": unique_hues,
+                        "unique_sats": unique_sats,
+                        "dominant_hue_bins": int(dominant_hue_bins),
+                        "is_false_color": is_false_color_thermal,
                         "decision": decision
                     })
 
@@ -169,40 +205,62 @@ def validate_thermal_video(file_path: str, *, sample_frames: int = 12) -> None:
     if checked == 0:
         raise FileValidationError("Uploaded video did not contain any readable frames.")
 
-    if checked == 0:
-        raise FileValidationError("Uploaded video did not contain any readable frames.")
-
-    non_thermal_ratio = non_thermal / checked
+    # Calculate ratios for balanced scoring
     thermal_ratio = thermal_like / checked
+    rgb_ratio = non_thermal / checked
+    uncertain_ratio = uncertain / checked
 
     avg_colorfulness = (sum_colorfulness / frames_with_metrics) if frames_with_metrics else 0.0
     avg_saturation = (sum_saturation / frames_with_metrics) if frames_with_metrics else 0.0
 
-    # Only reject when the vast majority is clearly RGB and few look thermal
-    logger.warning(
-        "Thermal validation summary: checked=%d thermal_like=%d non_thermal=%d "
-        "thermal_ratio=%.3f non_thermal_ratio=%.3f avg_colorfulness=%.2f "
-        "avg_saturation=%.3f max_colorfulness=%.2f samples=%s",
-        checked, thermal_like, non_thermal, thermal_ratio, non_thermal_ratio,
+    # Log validation summary for debugging
+    logger.info(
+        "Thermal validation summary: checked=%d thermal=%d rgb=%d uncertain=%d "
+        "thermal_ratio=%.3f rgb_ratio=%.3f uncertain_ratio=%.3f "
+        "avg_colorfulness=%.2f avg_saturation=%.3f max_colorfulness=%.2f samples=%s",
+        checked, thermal_like, non_thermal, uncertain, thermal_ratio, rgb_ratio, uncertain_ratio,
         avg_colorfulness, avg_saturation, max_colorfulness, sample_debug
     )
 
-    # Hard block obviously RGB footage even in non-strict mode (very colorful + almost all frames non-thermal)
-    if non_thermal_ratio >= 0.995 and avg_colorfulness > 80.0 and avg_saturation > 0.6 and max_colorfulness > 150.0:
-        raise FileValidationError(
-            "Uploaded video appears to be standard color footage. "
-            "Please provide thermal imagery captured by a thermal camera."
-        )
+    # Rejection criteria - must have clear thermal characteristics
+    rejection_msg = (
+        "Uploaded video appears to be standard color footage. "
+        "Please provide thermal imagery captured by a thermal camera."
+    )
 
-    # Soft gate: only block when almost everything looks RGB and very little looks thermal
-    if non_thermal_ratio >= 0.995 and thermal_ratio < 0.05:
-        msg = (
-            "Uploaded video appears to be standard color footage. "
-            "Please provide thermal imagery captured by a thermal camera."
-        )
+    # CRITICAL: If no frames look thermal, reject immediately
+    if thermal_ratio == 0 and checked > 0:
+        logger.warning("Hard block: zero thermal frames detected (thermal_ratio=0)")
+        raise FileValidationError(rejection_msg)
+
+    # Hard block: obviously RGB footage (any RGB detected + colorful)
+    if rgb_ratio > 0.3 and avg_colorfulness > 45.0:
+        logger.warning("Hard block: rgb_ratio=%.3f > 0.3 and avg_colorfulness=%.2f > 45",
+                      rgb_ratio, avg_colorfulness)
+        raise FileValidationError(rejection_msg)
+
+    # Hard block: mostly uncertain with no clear thermal (suspicious)
+    if uncertain_ratio > 0.5 and thermal_ratio < 0.3:
+        logger.warning("Hard block: uncertain_ratio=%.3f > 0.5 and thermal_ratio=%.3f < 0.3",
+                      uncertain_ratio, thermal_ratio)
+        raise FileValidationError(rejection_msg)
+
+    # Hard block: high saturation without being confirmed thermal colormap
+    if avg_saturation > 0.35 and thermal_ratio < 0.5:
+        logger.warning("Hard block: avg_saturation=%.3f > 0.35 and thermal_ratio=%.3f < 0.5",
+                      avg_saturation, thermal_ratio)
+        raise FileValidationError(rejection_msg)
+
+    # Balanced block: any RGB detected and few thermal
+    if rgb_ratio > 0.2 and thermal_ratio < 0.4:
         if STRICT_THERMAL_VALIDATION:
-            raise FileValidationError(msg)
-        logger.warning("Thermal validation non-strict mode: allowing file. %s", msg)
+            logger.warning("Strict mode block: rgb_ratio=%.3f, thermal_ratio=%.3f", rgb_ratio, thermal_ratio)
+            raise FileValidationError(rejection_msg)
+        logger.warning("Non-strict mode: allowing borderline video. rgb_ratio=%.3f, thermal_ratio=%.3f",
+                      rgb_ratio, thermal_ratio)
+
+    # Log successful validation
+    logger.info("Thermal validation passed: thermal_ratio=%.3f, rgb_ratio=%.3f", thermal_ratio, rgb_ratio)
 
 
 def validate_video_file(file: UploadFile) -> None:
