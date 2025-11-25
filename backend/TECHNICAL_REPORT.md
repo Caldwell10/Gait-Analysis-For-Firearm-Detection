@@ -1,9 +1,4 @@
 # Thermal Gait Surveillance System - Technical Report
-
-**Project:** Concealed Firearm Detection via Thermal Gait Analysis
-**Date:** 24th November 2025
-**Model:** Convolutional Autoencoder with Domain Adaptation for Thermal Imagery
-
 ---
 
 ## 1. Executive Summary
