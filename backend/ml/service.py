@@ -2,7 +2,9 @@
 ML Service for Real-time Gait Analysis and Threat Detection
 Integrates ConvAutoencoder model with FastAPI for production inference
 """
+import os
 import time
+import logging
 import torch
 import numpy as np
 import cv2
@@ -13,6 +15,12 @@ from sklearn.metrics.pairwise import euclidean_distances
 from .model import ConvAutoencoder
 from .processor import gei_from_video
 from .utils import device_auto, load_yaml
+
+# Configure logging for calibration
+logger = logging.getLogger(__name__)
+
+# Configurable threshold via environment variable (default: 0.50 calibrated for UCLM data)
+ML_THREAT_THRESHOLD = float(os.getenv("ML_THREAT_THRESHOLD", "0.50"))
 
 
 class GaitAnalysisService:
@@ -31,10 +39,11 @@ class GaitAnalysisService:
             self.device = None
             self.model = None
             self.config = None
-            self.threshold = 0.179  # Optimal threshold from training (88.1% AUC)
+            self.threshold = ML_THREAT_THRESHOLD  # Configurable via ML_THREAT_THRESHOLD env var
             self._latent_mean = None
             self._latent_cov_inv = None
             type(self)._initialized = True
+            logger.info(f"ML Service initialized with threshold={self.threshold} (set ML_THREAT_THRESHOLD env var to adjust)")
 
     def load_model(self, model_path: Optional[str] = None, config_path: Optional[str] = None):
         """Load trained model and configuration"""
@@ -153,6 +162,18 @@ class GaitAnalysisService:
 
             # Step 4: Combined score (as per training methodology)
             combined_score = 0.5 * recon_error + 0.5 * latent_score
+
+            # === CALIBRATION LOG: Raw scores for threshold tuning ===
+            logger.warning(
+                "CALIBRATION | video=%s | recon_error=%.6f | latent_score=%.6f | "
+                "combined_score=%.6f | threshold=%.6f | delta=%.6f",
+                Path(video_path).name,
+                recon_error,
+                latent_score,
+                combined_score,
+                self.threshold,
+                combined_score - self.threshold
+            )
 
             # Step 5: Threat detection
             threat_detected = combined_score >= self.threshold
