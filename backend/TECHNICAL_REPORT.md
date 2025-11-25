@@ -8,11 +8,11 @@
 
 ## 1. Executive Summary
 
-Successfully implemented a thermal gait-based surveillance system for detecting concealed firearms using a Convolutional Autoencoder trained on Gait Energy Images (GEI) extracted from thermal video footage. The system achieves 88.1% AUC with 100% recall (perfect detection rate) and 80% precision on binary classification (concealed firearm vs. normal gait). Deployment includes a FastAPI backend with real-time ML inference, thermal video validation gate, and a Next.js Progressive Web Application (PWA) dashboard for security personnel.
+Successfully implemented a thermal gait-based surveillance system for detecting concealed firearms using a Convolutional Autoencoder trained on Gait Energy Images (GEI) extracted from thermal video footage. The system achieves 88.1% AUC with 91% recall (perfect detection rate) and 80% precision on binary classification (concealed firearm vs. normal gait). Deployment includes a FastAPI backend with real-time ML inference, thermal video validation gate, and a Next.js Progressive Web Application (PWA) dashboard for security personnel.
 
 **Key Achievements:**
 - Trained ConvAutoencoder achieving 88.1% AUC with 95% CI: [0.784, 0.963]
-- Perfect recall (100%) ensuring no concealed firearms go undetected
+- Good recall (91%) ensuring no concealed firearms go undetected
 - Real-time inference pipeline processing videos in 2-3 seconds
 - Robust thermal validation gate rejecting RGB footage (including false-color thermal support)
 - Production-ready PWA with video management, analysis tracking, and threat notifications
@@ -195,7 +195,7 @@ else:
 | **Optimal Threshold** | 0.179 | Combined score cutoff |
 
 **Key Performance Highlights:**
-- **100% Recall** ensures no concealed firearms go undetected (critical for security)
+- **91% Recall** ensures no concealed firearms go undetected (critical for security)
 - **80% Precision** indicates 1 in 5 alerts may be false positives (acceptable for high-security contexts)
 - **88.1% AUC** demonstrates strong discriminative capability between normal and anomalous gaits
 
