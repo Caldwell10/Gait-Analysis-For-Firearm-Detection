@@ -1,0 +1,243 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# Production builds
+build/
+dist/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage
+.grunt
+
+# Bower dependency directory
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons
+build/Release
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Python Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+thermal-env/
+
+# FastAPI/SQLAlchemy
+*.db
+*.sqlite
+*.sqlite3
+
+# Python backend specific
+backend/.env
+backend/.env.local
+backend/uploads/
+backend/logs/
+backend/temp/
+
+# TestSprite generated files
+testsprite_tests/
+**/testsprite_tests/
+
+# Jest coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+test_endpoints.py
+
+# System design documentation 
+SYSTEM_DESIGN.md
+
+# Lock files
+yarn.lock
+pnpm-lock.yaml
+
+CLAUDE.md
+
+# Video processing artifacts 
+*.pt
+*.pth
+*.onnx
+models/checkpoints/
+apps/api/ml/outputs/
+
+# Additional Python ML dependencies
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# Video processing temp files
+*.tmp.mp4
+*.tmp.avi
+*.processing
+*_h264.mp4
+*_converted.*
+/tmp/test_h264.mp4
+
+# ML Generated Artifacts (Sprint 3)
+apps/api/uploads/videos/**/gei/
+*.gei.png
+*.gei.jpg
+apps/api/ml/outputs/
+ml_processing_*.log
+
+# Additional log patterns
+
+apps/api/processing.log
+apps/api/analysis.log
+
+# IDE and development
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Testing artifacts
+test.db
+*.test.db
+test_*.sqlite
+tests/temp/
+tests/uploads/
+
+# Environment configuration security
+apps/api/.env*
+!apps/api/.env.example
+apps/pwa/.env*
+!apps/pwa/.env.example
+
+# Production configuration files
+config.prod.yaml
+config.production.yaml
+secrets.yaml
+credentials.json
+
+# Database configuration files
+database.conf
+db_config.ini
+
+# Temporary project files
+cookies.txt
+SPRINT3_ISSUES.md
+
+# Configuration Management 
+# Allow .env.example files but protect actual .env files
+*.env
+*.env.local
+*.env.development
+*.env.production
+*.env.staging
+!*.env.example
+
+# ML Model configuration backups
+apps/api/ml/config.*.yaml
+apps/api/ml/settings.*.json
+
+# Runtime configuration overrides
+config_override.*
+settings_override.*
+
+
+uploads
+
+.claude

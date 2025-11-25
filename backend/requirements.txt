@@ -1,0 +1,27 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy==1.4.53
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
+python-multipart==0.0.6
+python-magic==0.4.27
+python-dotenv==1.0.0
+email-validator==2.1.0
+itsdangerous==2.1.2
+alembic==1.12.1
+pydantic-settings==2.1.0
+
+# ML Dependencies for Sprint 3
+torch>=1.9.0
+torchvision
+opencv-python
+scikit-learn
+numpy
+pyyaml
+
+# Video Processing
+ffmpeg-python==0.2.0
+
+# OAuth Integration
+authlib==1.3.0
+httpx==0.27.0
