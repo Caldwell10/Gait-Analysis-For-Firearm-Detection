@@ -3,7 +3,7 @@
 
 ## 1. Executive Summary
 
-Successfully implemented a thermal gait-based surveillance system for detecting concealed firearms using a Convolutional Autoencoder trained on Gait Energy Images (GEI) extracted from thermal video footage. The system achieves 88.1% AUC with 91% recall (perfect detection rate) and 80% precision on binary classification (concealed firearm vs. normal gait). Deployment includes a FastAPI backend with real-time ML inference, thermal video validation gate, and a Next.js Progressive Web Application (PWA) dashboard for security personnel.
+Successfully implemented a thermal gait-based surveillance system for detecting concealed firearms using a Convolutional Autoencoder trained on Gait Energy Images (GEI) extracted from thermal video footage. The system achieves 88.1% AUC with 91% recall and 80% precision on binary classification (concealed firearm vs. normal gait). Deployment includes a FastAPI backend with real-time ML inference, thermal video validation gate, and a Next.js Progressive Web Application (PWA) dashboard for security personnel.
 
 **Key Achievements:**
 - Trained ConvAutoencoder achieving 88.1% AUC with 95% CI: [0.784, 0.963]
